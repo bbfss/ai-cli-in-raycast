@@ -62,7 +62,7 @@ The extension uses existing local CLI authentication. It does not import browser
 
 npm CLIs are resolved to known Node entrypoints and require Node.js on PATH. Windows `.cmd`/extensionless npm shims never interpolate prompts. For custom WorkBuddy installations, set WorkBuddy CLI Path to `resources/app.asar.unpacked/cli/bin/codebuddy`; the embedded launch selects its WorkBuddy bundle. A separate CodeBuddy CLI is not automatically treated as WorkBuddy. A `.js` entrypoint can also be selected for Gemini or Qoder. The extension does not install CLIs itself. Antigravity requires a native executable on Windows; shell wrappers are not executed.
 
-Exchange boundaries are fixed: each exchange is numbered, questions use a quotation block and replies use the provider header. Assistant-authored standalone rules are hidden for display so they cannot be mistaken for a new exchange. Raw/copied text stays unchanged.
+Exchanges use simple horizontal separators, quoted questions and provider headers, without round numbers or extra card headings. Assistant-authored standalone rules are hidden for display so they cannot be mistaken for a new exchange. Raw/copied text stays unchanged.
 
 The latest question-and-answer group appears first, with the question above its answer and earlier exchanges below. The conversation renders Markdown directly rather than flattening replies into List rows; stored and copied text stays unchanged. **Stop Response** is an explicit action during a reply; Enter never stops it. Codex accepts additional instructions while responding. Other CLIs let you write a draft and send it manually after the reply finishes or is stopped; drafts are not automatically queued.
 

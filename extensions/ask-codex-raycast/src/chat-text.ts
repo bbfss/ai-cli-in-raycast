@@ -32,35 +32,30 @@ export function conversationMarkdown(
   // Inline images otherwise sit above the text baseline. Standard subscript
   // positioning and an 18px icon align the mark with the provider name.
   const speaker = `${avatar ? `<sub>![${assistant}](<${avatar.href}>)</sub> ` : ""}**${assistant}**`;
-  const groups = conversationGroups(messages);
-  const cards = groups.map(
-    (round, roundIndex) =>
-      `### ${t("Exchange {number}", { number: groups.length - roundIndex })}\n\n` +
-      round
-        .map((message, index) => {
-          const body =
-            renderMarkdown(
-              message.role === "assistant"
-                ? stripMessageDividers(message.content)
-                : message.content,
-            ) || t("Thinking…");
-          if (message.role === "user") {
-            const label =
-              message.kind === "steer"
-                ? t("Additional Instructions")
-                : t("You");
-            // Quote every line so multiline prompts and fenced code remain a
-            // single, readable question block in Raycast's native Markdown.
-            return `> **${label}**\n>\n${body
-              .split("\n")
-              .map((line) => `> ${line}`)
-              .join("\n")}`;
-          }
-          return round[index - 1]?.role === "assistant"
-            ? body
-            : `${speaker} · ${t("Reply")}\n\n${body}`;
-        })
-        .join("\n\n"),
+  const cards = conversationGroups(messages).map((round) =>
+    round
+      .map((message, index) => {
+        const body =
+          renderMarkdown(
+            message.role === "assistant"
+              ? stripMessageDividers(message.content)
+              : message.content,
+          ) || t("Thinking…");
+        if (message.role === "user") {
+          const label =
+            message.kind === "steer" ? t("Additional Instructions") : t("You");
+          // Quote every line so multiline prompts and fenced code remain a
+          // single, readable question block in Raycast's native Markdown.
+          return `**${label}**\n\n${body
+            .split("\n")
+            .map((line) => `> ${line}`)
+            .join("\n")}`;
+        }
+        return round[index - 1]?.role === "assistant"
+          ? body
+          : `${speaker}\n\n${body}`;
+      })
+      .join("\n\n"),
   );
   const notice = error || status;
   const header = notice
