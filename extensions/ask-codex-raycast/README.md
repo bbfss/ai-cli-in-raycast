@@ -11,20 +11,20 @@ One **AI CLI in Raycast** extension, with eight native Raycast commands:
 - **Gemini in Raycast**
 - **CLI Settings** — installation detection and preferences
 
-Each CLI command opens that CLI directly and restores its own conversations, drafts, model choice, and setup record. The launcher and settings screen do not share conversation content between CLIs. All eight commands use the suite's new `suite-icon.png`.
+Each CLI command opens that CLI directly and restores its own conversations, drafts, model choice, and setup record. The launcher and settings screen do not share conversation content between CLIs. All eight commands use the minimal black-and-white speech bubble in `chat-icon.png`.
 
 ## Use and enable individual CLIs
 
 1. Open **Raycast Settings → Extensions → AI CLI in Raycast**. Use Raycast's native **Enabled** checkbox on each command to show or hide it. Disabled CLI commands cannot be launched from the suite launcher or in-chat Switch CLI menu either.
 2. Install and sign in to the CLI through its own terminal interface. Open **AI CLI in Raycast** to choose a CLI, or launch a command such as **Codex in Raycast** directly. With automatic detection enabled, first-time setup checks the local connection and model catalog automatically, then asks you to choose a model. These checks send no inference prompt. Manual detection mode keeps an explicit connection-check action.
-3. Press **Enter** to open the floating composer, type, then press **Enter** to send. The full-width Markdown conversation stays on the same page.
+3. Type in the input at the top and press **Enter** to send. Input and replies stay on the same page. This native prototype uses a single-line search field; it does not provide Shift+Enter line breaks.
 4. **Cmd/Ctrl+P** switches CLI commands; **Cmd/Ctrl+M** opens models. Effort Level appears only where supported. Stop a running reply before switching.
 
 Command enablement controls Raycast entry points; it does not uninstall a CLI or erase its saved chats. Existing Codex extension and command IDs are retained. Changing providers saves the current draft and launches the other command without passing your prompt or conversation to it.
 
 ## Settings and detection
 
-Open **CLI Settings** to see the six installation states and detected paths. The screen uses a native List and metadata inspector; setup uses native Forms, while conversations keep the full-width Detail and floating composer.
+Open **CLI Settings** to see the six installation states and detected paths. Settings uses a native List and metadata inspector; setup uses native Forms. Chat uses a native List with one conversation row and a Markdown detail pane, keeping the input visible. Raycast supplies the split layout; this prototype does not reproduce a full-width custom chat application.
 
 | Preference | Behavior |
 | --- | --- |
@@ -62,7 +62,11 @@ The extension uses existing local CLI authentication. It does not import browser
 
 npm CLIs are resolved to known Node entrypoints and require Node.js on PATH. Windows `.cmd`/extensionless npm shims never interpolate prompts. For custom WorkBuddy installations, set WorkBuddy CLI Path to `resources/app.asar.unpacked/cli/bin/codebuddy`; the embedded launch selects its WorkBuddy bundle. A separate CodeBuddy CLI is not automatically treated as WorkBuddy. A `.js` entrypoint can also be selected for Gemini or Qoder. The extension does not install CLIs itself. Antigravity requires a native executable on Windows; shell wrappers are not executed.
 
-Raycast's native full-width Detail has no permanent input field. The floating composer keeps native Markdown/code/math rendering and preserves drafts. An earlier send acknowledgement cannot clear newer input. Saved drafts can be sent directly or copied/pasted to edit because the native submenu input cannot be programmatically refilled.
+The latest question-and-answer group appears first, with the question above its answer. User messages use Markdown quotation blocks, without avatars. **Stop Response** is available in Actions during a reply; Enter never stops a reply. Codex can accept additional instructions while responding. Other CLIs let you keep writing a draft, then send it manually after the reply finishes or is stopped; drafts are not automatically queued.
+
+A successful send acknowledgement clears the submitted input only if it has not since been edited. Later typing, identical retyping and explicit clearing are protected from an older acknowledgement. Failed sends keep the draft. **Clear Draft** explicitly discards it; Esc follows Raycast's search-field behavior and may clear single-line text before returning.
+
+Older or pasted multiline drafts are displayed in full as literal text on the same page and sent unchanged. Since the native search field cannot safely edit them, normalization callbacks are ignored until you send the draft or use Clear Draft to replace it. No separate editor or preview page is opened.
 
 ## Architecture
 
@@ -72,8 +76,10 @@ The provider/agent separation described by [Magpie](https://github.com/yetone/ma
 
 ## Verification and development status
 
-On Windows, build, standalone TypeScript, lint and **151 tests passed**. Tests cover actual production adapters and callbacks, installation discovery, disabled-command routing, localization, setup mount cleanup, subprocess cancellation and persisted session identity. Native Raycast also showed the Chinese launcher with six detection states; opening WorkBuddy from it automatically reached model selection. This demonstrates discovery and onboarding, not successful WorkBuddy authentication.
+Build, standalone TypeScript, lint and **159 tests passed** for the same-page prototype. Tests include pending-send edits, multiline draft preservation and explicit stop behavior. Windows keyboard injection verified Enter sending from the persistent input and a reply on the same page; Stop Response was also verified through Actions. Further native draft checks and a fresh macOS run remain outstanding.
 
-Codex, Antigravity and Qoder CN have real inference/resume/cancel evidence. WorkBuddy still needs native CLI login, Gemini CLI is blocked by account compatibility, and international Qoder remains untested locally. A fresh macOS run and physical Enter-to-send keyboard acceptance remain outstanding. See [HANDOFF.md](HANDOFF.md) for the evidence and limits.
+Earlier native Raycast checks showed the Chinese launcher with six detection states; opening WorkBuddy automatically reached model selection. This demonstrates discovery and onboarding, not successful WorkBuddy authentication.
+
+Codex, Antigravity and Qoder CN have real inference/resume/cancel evidence. WorkBuddy still needs native CLI login, Gemini CLI is blocked by account compatibility, and international Qoder remains untested locally. See [HANDOFF.md](HANDOFF.md) for the evidence and limits.
 
 The internal extension ID remains `ask-codex-raycast` to preserve existing local data. This is a development version. The previous Store applications remain withdrawn: **do not reopen them or submit a new application**. Any future user-authorized publication would first require a fresh review of Store policies, including localization and branding.

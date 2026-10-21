@@ -15,6 +15,60 @@ export function uiLanguage(): UILanguage {
 // Keep the two Chinese variants explicit: automatic character conversion can
 // change product names or technical meanings. Unknown text always stays intact.
 const translations: Record<string, readonly [string, string]> = {
+  "Wait for Response": ["等待回复", "等待回覆"],
+  "Keep drafting · Wait or stop, then send": [
+    "可继续写草稿 · 回复结束或停止后发送",
+    "可繼續寫草稿 · 回覆結束或停止後傳送",
+  ],
+  "Type your message above, then press Enter to send.": [
+    "在上方输入消息，按 Enter 发送。",
+    "在上方輸入訊息，按 Enter 傳送。",
+  ],
+  "Write a message, then press Enter…": [
+    "输入消息，按 Enter 发送…",
+    "輸入訊息，按 Enter 傳送…",
+  ],
+  "Multiline draft preserved": ["已保留多行草稿", "已保留多行草稿"],
+  "Send the complete draft or clear it before typing a replacement.": [
+    "请发送完整草稿，或清除后再输入新内容。",
+    "請傳送完整草稿，或清除後再輸入新內容。",
+  ],
+  "Saved multiline draft": ["已保存的多行草稿", "已儲存的多行草稿"],
+  "All lines are preserved. Enter sends this complete draft; Clear Draft discards it.":
+    [
+      "全部内容均已保留。按 Enter 发送完整草稿；“清除草稿”会将其丢弃。",
+      "全部內容均已保留。按 Enter 傳送完整草稿；「清除草稿」會將其捨棄。",
+    ],
+  "Send Saved Multiline Draft": [
+    "发送已保存的多行草稿",
+    "傳送已儲存的多行草稿",
+  ],
+  "What would you like to work on?": ["想聊点什么？", "想聊點什麼？"],
+  "Press Enter to write a message.": [
+    "按 Enter 开始输入。",
+    "按 Enter 開始輸入。",
+  ],
+  "Additional Instructions": ["补充说明", "補充說明"],
+  Message: ["消息", "訊息"],
+  "Write a message…": ["输入消息…", "輸入訊息…"],
+  "Sending…": ["正在发送…", "正在傳送…"],
+  "Edit Multiple Lines": ["编辑多行消息", "編輯多行訊息"],
+  "Press Esc to return, then Enter to send. Edits are saved automatically.": [
+    "按 Esc 返回，再按 Enter 发送。内容自动保存。",
+    "按 Esc 返回，再按 Enter 傳送。內容自動儲存。",
+  ],
+  "Draft ready. Press Enter to send.": [
+    "草稿已就绪，按 Enter 发送。",
+    "草稿已就緒，按 Enter 傳送。",
+  ],
+  "Send Draft": ["发送草稿", "傳送草稿"],
+  "Restore Draft": ["恢复草稿", "還原草稿"],
+  "Press Enter to restore draft": ["按 Enter 恢复草稿", "按 Enter 還原草稿"],
+  "{count} lines": ["{count} 行", "{count} 行"],
+  "Responding…": ["正在回复…", "正在回覆…"],
+  "Searching the web…": ["正在搜索…", "正在搜尋…"],
+  "Running command…": ["正在执行命令…", "正在執行指令…"],
+  "Calling tool…": ["正在使用工具…", "正在使用工具…"],
   "Set language, CLI detection, paths, and permissions.": [
     "设置语言、CLI 检测、路径与权限。",
     "設定語言、CLI 偵測、路徑與權限。",
@@ -353,6 +407,17 @@ const translations: Record<string, readonly [string, string]> = {
   "Local AI CLI": ["本机 AI CLI", "本機 AI CLI"],
   "Add Instructions": ["补充指令", "補充指令"],
   "Enter Message": ["输入消息", "輸入訊息"],
+  "Write Next Message": ["写下一条消息", "撰寫下一則訊息"],
+  "Your draft is saved. Send it after the response finishes or you stop it.": [
+    "草稿已保存，回复结束或停止后可发送。",
+    "草稿已儲存，回覆結束或停止後可傳送。",
+  ],
+  "Review Draft": ["预览草稿", "預覽草稿"],
+  Draft: ["草稿", "草稿"],
+  "Shift+Enter to edit multiple lines": [
+    "Shift+Enter 编辑多行",
+    "Shift+Enter 編輯多行",
+  ],
   "Pending · {preview}": ["待发送 · {preview}", "待傳送 · {preview}"],
   "Type a message, press Enter to send": [
     "输入消息，按 Enter 发送",

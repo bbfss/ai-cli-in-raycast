@@ -33,7 +33,6 @@ import { type CodexEvent, type CodexModel, type ModelSelection } from "./codex";
 import { useSessionHistory, type Page } from "./history";
 import { conversationMarkdown } from "./chat-text";
 import { ModelMenu, EffortMenu } from "./model-menu";
-import { MessageComposer } from "./message-composer";
 import {
   asRecord,
   asString,
@@ -254,6 +253,8 @@ function NativeChat(
   const persistedRef = useRef<StoredConversation | null>(null);
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const draftRef = useRef(draft);
+  const draftEditRevision = useRef(0);
+  const multilineNoticeRef = useRef(false);
   draftRef.current = draft;
   // Keep the latest snapshot synchronously, including just-typed text on exit.
   if (conversation.threadId)
@@ -265,6 +266,41 @@ function NativeChat(
           ? persistedRef.current.updatedAt
           : conversation.updatedAt,
     };
+
+  function setDraftValue(text: string) {
+    draftRef.current = text;
+    if (persistedRef.current)
+      persistedRef.current = { ...persistedRef.current, draft: text };
+    setDraft(text);
+  }
+
+  function editDraft(text: string) {
+    if (switching) return;
+    // List's native search field is single-line. Preserve an older/pasted raw
+    // multiline draft if the host normalizes it, rather than sending truncated
+    // content. It is displayed in full in the detail and has an explicit clear.
+    if (/[\r\n]/.test(draftRef.current) && text !== draftRef.current) {
+      if (!multilineNoticeRef.current) {
+        multilineNoticeRef.current = true;
+        void showToast({
+          style: Toast.Style.Failure,
+          title: t("Multiline draft preserved"),
+          message: t(
+            "Send the complete draft or clear it before typing a replacement.",
+          ),
+        });
+      }
+      return;
+    }
+    draftEditRevision.current += 1;
+    setDraftValue(text);
+  }
+
+  function clearDraft() {
+    multilineNoticeRef.current = false;
+    draftEditRevision.current += 1;
+    setDraftValue("");
+  }
 
   function persistLibrary() {
     if (!storageReadyRef.current) return;
@@ -387,20 +423,14 @@ function NativeChat(
         return;
       if (event.method === "turn/started") {
         setBusy(true);
-        updateStatus(
-          capabilities.supportsSteering
-            ? t("Thinking · Press Enter to steer")
-            : t("Thinking · You can stop the response"),
-        );
+        updateStatus(t("Thinking…"));
       }
       if (event.method === "item/started") {
         const type = asString(asRecord(params.item).type);
-        if (type === "webSearch")
-          updateStatus(t("Searching the web · Can still steer"));
+        if (type === "webSearch") updateStatus(t("Searching the web…"));
         else if (type === "commandExecution")
-          updateStatus(t("Running command · Can stop or steer"));
-        else if (type === "mcpToolCall")
-          updateStatus(t("Calling tool · Can still steer"));
+          updateStatus(t("Running command…"));
+        else if (type === "mcpToolCall") updateStatus(t("Calling tool…"));
       }
       if (
         event.method === "item/agentMessage/delta" ||
@@ -422,11 +452,7 @@ function NativeChat(
             completed,
           }),
         }));
-        updateStatus(
-          capabilities.supportsSteering
-            ? t("Responding · Press Enter to steer")
-            : t("Responding · You can stop the response"),
-        );
+        updateStatus(t("Responding…"));
       }
       if (event.method === "turn/completed") {
         const turn = asRecord(params.turn);
@@ -526,7 +552,9 @@ function NativeChat(
           (session) => session.threadId === library.activeId,
         ) || emptyConversation();
       setConversation(stored);
-      setDraft(stored.draft || "");
+      // Synchronize the ref before connecting: a fast connection may finish
+      // before React renders the restored draft. Keep text typed while loading.
+      if (draftEditRevision.current === 0) setDraftValue(stored.draft || "");
       await client.connect();
       if (disposed) {
         client.close();
@@ -571,7 +599,7 @@ function NativeChat(
       );
       persistedRef.current = resumed;
       setConversation(resumed);
-      setDraft(resumed.draft || "");
+      setDraftValue(resumed.draft || "");
       save(resumed);
       setBusy(Boolean(client.currentTurnId));
       setCurrentModel(client.currentModelSelection);
@@ -579,9 +607,7 @@ function NativeChat(
       setReady(true);
       updateStatus(
         client.currentTurnId
-          ? capabilities.supportsSteering
-            ? t("Thinking · Press Enter to steer")
-            : t("Thinking · You can stop the response")
+          ? t("Thinking…")
           : t("Connected · Press Enter to send"),
         Boolean(client.currentTurnId),
       );
@@ -682,11 +708,7 @@ function NativeChat(
     const replyId = makeId();
     activeReplyRef.current = replyId;
     setBusy(true);
-    updateStatus(
-      capabilities.supportsSteering
-        ? t("Thinking · Press Enter to steer")
-        : t("Thinking · You can stop the response"),
-    );
+    updateStatus(t("Thinking…"));
     setConversation((previous) => ({
       ...previous,
       messages: [
@@ -726,11 +748,15 @@ function NativeChat(
     return next;
   }
 
-  async function reportFailure(reason: unknown, prompt: string) {
+  async function reportFailure(
+    reason: unknown,
+    prompt: string,
+    restoreDraft = true,
+  ) {
     if (!mountedRef.current) return;
     const message = messageOf(reason);
     setError(message);
-    setDraft((current) => current || prompt);
+    if (restoreDraft && !draftRef.current) setDraftValue(prompt);
     await showToast({
       style: Toast.Style.Failure,
       title: t("Failed to send"),
@@ -749,8 +775,8 @@ function NativeChat(
   }, [ready, initialPrompt]);
 
   async function sendPrompt(prompt: string): Promise<boolean> {
-    const text = prompt.trim();
-    if (!text || switching) return false;
+    const text = prompt;
+    if (!text.trim() || switching) return false;
     if (busy && !capabilities.supportsSteering) {
       await showToast({
         style: Toast.Style.Failure,
@@ -770,12 +796,20 @@ function NativeChat(
       return false;
     }
     requestPendingRef.current = true;
-    setDraft("");
+    const submittedRevision = draftEditRevision.current;
     try {
       await enqueue(text);
+      // Keep pending input durable until the CLI acknowledges it. New edits,
+      // including the same text retyped or an explicit clear, take precedence.
+      if (mountedRef.current && draftEditRevision.current === submittedRevision)
+        setDraftValue("");
       return true;
     } catch (reason) {
-      await reportFailure(reason, text);
+      await reportFailure(
+        reason,
+        text,
+        draftEditRevision.current === submittedRevision,
+      );
       return false;
     } finally {
       requestPendingRef.current = false;
@@ -808,7 +842,7 @@ function NativeChat(
       };
       persistedRef.current = next;
       setConversation(next);
-      setDraft("");
+      setDraftValue("");
       save(next);
       setPage("chat");
       activeReplyRef.current = null;
@@ -864,14 +898,12 @@ function NativeChat(
       activeReplyRef.current = null;
       persistedRef.current = next;
       setConversation(next);
-      setDraft(next.draft || "");
+      setDraftValue(next.draft || "");
       setBusy(Boolean(client.currentTurnId));
       setError("");
       updateStatus(
         client.currentTurnId
-          ? capabilities.supportsSteering
-            ? t("Thinking · Press Enter to steer")
-            : t("Thinking · You can stop the response")
+          ? t("Thinking…")
           : t("Session restored · Press Enter to continue chatting"),
         Boolean(client.currentTurnId),
       );
@@ -920,6 +952,25 @@ function NativeChat(
       .join("\n\n") || "";
 
   const codexNotFound = Boolean(error && !ready);
+  async function stopResponse() {
+    try {
+      updateStatus(t("Stopping…"));
+      await clientRef.current?.interrupt();
+    } catch (reason) {
+      await reportFailure(reason, "");
+    }
+  }
+  const stopResponseAction = busy && (
+    <Action
+      title={t("Stop Response")}
+      icon={Icon.Stop}
+      shortcut={{
+        modifiers: [process.platform === "darwin" ? "cmd" : "ctrl"],
+        key: ".",
+      }}
+      onAction={stopResponse}
+    />
+  );
   const secondaryActions = (
     <>
       {codexNotFound && props.provider === "codex" && (
@@ -927,24 +978,6 @@ function NativeChat(
           title={t("Install Codex CLI")}
           icon={Icon.Download}
           url="https://github.com/openai/codex#installation"
-        />
-      )}
-      {busy && (
-        <Action
-          title={t("Stop Response")}
-          icon={Icon.Stop}
-          shortcut={{
-            modifiers: [process.platform === "darwin" ? "cmd" : "ctrl"],
-            key: ".",
-          }}
-          onAction={async () => {
-            try {
-              updateStatus(t("Stopping…"));
-              await clientRef.current?.interrupt();
-            } catch (reason) {
-              await reportFailure(reason, "");
-            }
-          }}
         />
       )}
       <Action
@@ -1046,6 +1079,15 @@ function NativeChat(
       ),
     [visibleMessages, ready, error, status, statusVisible, capabilities.label],
   );
+  const multilineDraft = /[\r\n]/.test(draft);
+  // A fence longer than every run in the draft keeps Markdown-looking prompts
+  // visible as literal text. The sent value remains the original raw draft.
+  const draftFence = "`".repeat(
+    Math.max(2, ...(draft.match(/`+/g) || []).map((run) => run.length)) + 1,
+  );
+  const displayMarkdown = multilineDraft
+    ? `**${t("Saved multiline draft")}**\n\n${t("All lines are preserved. Enter sends this complete draft; Clear Draft discards it.")}\n\n${draftFence}text\n${draft}\n${draftFence}\n\n---\n\n${chatMarkdown}`
+    : chatMarkdown;
   const historyProps = useSessionHistory({
     page,
     sessions,
@@ -1121,20 +1163,34 @@ function NativeChat(
         .filter(Boolean)
         .join(" · ")}
     >
-      {!ready && error ? (
+      <Action
+        title={
+          busy && !capabilities.supportsSteering
+            ? t("Wait for Response")
+            : multilineDraft
+              ? t("Send Saved Multiline Draft")
+              : busy && capabilities.supportsSteering
+                ? t("Send Instructions")
+                : t("Send Message")
+        }
+        icon={Icon.ArrowRight}
+        onAction={async () => {
+          await sendPrompt(draftRef.current);
+        }}
+      />
+      {!ready && error && (
         <Action
           title={t("Reconnect")}
           icon={Icon.ArrowClockwise}
           onAction={reconnect}
         />
-      ) : (
-        <MessageComposer
-          draft={draft}
-          busy={busy && capabilities.supportsSteering}
-          ready={ready}
-          onChange={setDraft}
-          onSend={sendPrompt}
-          controls={conversationControls(false)}
+      )}
+      {stopResponseAction}
+      {draft && (
+        <Action
+          title={t("Clear Draft")}
+          icon={Icon.Eraser}
+          onAction={clearDraft}
         />
       )}
       {conversationControls()}
@@ -1143,12 +1199,32 @@ function NativeChat(
   );
   if (page === "chat") {
     return (
-      <Detail
+      <List
         navigationTitle={`${capabilities.label} in Raycast`}
-        markdown={chatMarkdown}
+        filtering={false}
+        throttle={false}
+        searchText={draft}
+        onSearchTextChange={editDraft}
+        searchBarPlaceholder={t("Write a message, then press Enter…")}
+        isShowingDetail
+        selectedItemId="conversation"
         isLoading={(!ready && !error) || busy || switching}
-        actions={chatActions()}
-      />
+      >
+        <List.Item
+          id="conversation"
+          title={capabilities.label}
+          subtitle={
+            busy && !capabilities.supportsSteering
+              ? t("Keep drafting · Wait or stop, then send")
+              : statusVisible
+                ? status
+                : undefined
+          }
+          icon={Icon.Message}
+          detail={<List.Item.Detail markdown={displayMarkdown} />}
+          actions={chatActions()}
+        />
+      </List>
     );
   }
   return (

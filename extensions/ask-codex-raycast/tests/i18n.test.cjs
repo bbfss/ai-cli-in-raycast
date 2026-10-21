@@ -38,8 +38,8 @@ test("placeholder substitution preserves opaque values, missing tokens, and unkn
 test("localized renderer translates interface copy while preserving conversation and provider text", () => {
   setLanguage("zh-TW");
   const empty = conversationMarkdown([], "/assets", "", "", "Qoder CN");
-  assert.match(empty, /Qoder CN in Raycast/);
-  assert.match(empty, /按 Enter 開啟輸入框/);
+  assert.match(empty, /想聊點什麼/);
+  assert.match(empty, /在上方輸入訊息，按 Enter 傳送/);
   assert.doesNotMatch(empty, /\| --- \|/);
   const messages = [
     { id: "user", role: "user", content: "CLI Settings" },
@@ -60,5 +60,6 @@ test("localized renderer translates interface copy while preserving conversation
   assert.match(rendered, /CLI Settings/);
   assert.match(rendered, /Model: gpt-6.1-sol *\n\*\*Answer\*\*/);
   assert.match(rendered, /\*\*你\*\*/);
+  assert.match(rendered, /\*\*Gemini\*\*/);
   assert.equal(messages[0].content, "CLI Settings");
 });

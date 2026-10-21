@@ -3,7 +3,7 @@
   "name": "ask-codex-raycast",
   "title": "AI CLI in Raycast",
   "description": "A suite of native Raycast chats for your installed AI CLIs, with independent commands, settings, and sessions.",
-  "icon": "suite-icon.png",
+  "icon": "chat-icon.png",
   "author": "bbfss",
   "license": "MIT",
   "platforms": [
@@ -32,7 +32,7 @@
         "gemini"
       ],
       "disabledByDefault": false,
-      "icon": "suite-icon.png"
+      "icon": "chat-icon.png"
     },
     {
       "name": "index",
@@ -55,7 +55,7 @@
           "required": false
         }
       ],
-      "icon": "suite-icon.png",
+      "icon": "chat-icon.png",
       "disabledByDefault": false
     },
     {
@@ -79,7 +79,7 @@
           "required": false
         }
       ],
-      "icon": "suite-icon.png",
+      "icon": "chat-icon.png",
       "disabledByDefault": false
     },
     {
@@ -102,7 +102,7 @@
           "required": false
         }
       ],
-      "icon": "suite-icon.png",
+      "icon": "chat-icon.png",
       "disabledByDefault": false
     },
     {
@@ -126,7 +126,7 @@
           "required": false
         }
       ],
-      "icon": "suite-icon.png",
+      "icon": "chat-icon.png",
       "disabledByDefault": false
     },
     {
@@ -150,7 +150,7 @@
           "required": false
         }
       ],
-      "icon": "suite-icon.png",
+      "icon": "chat-icon.png",
       "disabledByDefault": false
     },
     {
@@ -173,7 +173,7 @@
           "required": false
         }
       ],
-      "icon": "suite-icon.png",
+      "icon": "chat-icon.png",
       "disabledByDefault": false
     },
     {
@@ -190,7 +190,7 @@
         "language"
       ],
       "disabledByDefault": false,
-      "icon": "suite-icon.png"
+      "icon": "chat-icon.png"
     }
   ],
   "preferences": [

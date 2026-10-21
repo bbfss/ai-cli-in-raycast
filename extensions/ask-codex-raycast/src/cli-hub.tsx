@@ -115,7 +115,7 @@ export default function CliHub() {
             key={entry.id}
             id={entry.id}
             title={`${entry.label} in Raycast`}
-            icon="suite-icon.png"
+            icon="chat-icon.png"
             keywords={[entry.id, "cli", entry.label]}
             accessories={[
               {
