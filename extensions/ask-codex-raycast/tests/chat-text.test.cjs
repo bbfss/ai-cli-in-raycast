@@ -149,3 +149,33 @@ test("connection errors take precedence over stale status", () => {
   assert.match(output, /^\*\*Connection Notice\*\* · 连接失败 请重试/);
   assert.ok(!output.includes("已连接"));
 });
+
+test("numbered exchange boundaries stay distinct from assistant-generated rules", () => {
+  const messages = [
+    { id: "u1", role: "user", content: "First question" },
+    {
+      id: "a1",
+      role: "assistant",
+      content: "First answer\n\n---\n\nMore detail",
+    },
+    { id: "u2", role: "user", content: "Second question" },
+    {
+      id: "a2",
+      role: "assistant",
+      content: "Second answer\n\n***\n\nFinal detail",
+    },
+  ];
+  const raw = JSON.stringify(messages);
+  const output = conversationMarkdown(messages, "/assets", "", "", "Codex");
+  assert.match(
+    output,
+    /^### Exchange 2\n\n> \*\*You\*\*\n>\n> Second question/,
+  );
+  assert.match(output, /\*\*Codex\*\* · Reply/);
+  assert.equal(output.match(/^---$/gm).length, 1);
+  assert.doesNotMatch(output, /^\*\*\*$/m);
+  assert.ok(output.indexOf("Exchange 2") < output.indexOf("Exchange 1"));
+  assert.ok(output.includes("More detail"));
+  assert.ok(output.includes("Final detail"));
+  assert.equal(JSON.stringify(messages), raw);
+});

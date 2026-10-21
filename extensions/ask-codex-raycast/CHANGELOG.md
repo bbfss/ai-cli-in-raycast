@@ -1,5 +1,10 @@
 # AI CLI in Raycast
 
+## [Clear Exchange Boundaries] - 2026-10-21
+
+- Number exchanges, box each question with a quotation block, and give AI replies their own provider heading.
+- Reserve horizontal rules for real exchange boundaries; keep assistant-authored rules in stored/copied text while hiding them in the displayed reply.
+
 ## [Full-width Markdown and Floating Input] - 2026-10-21
 
 - Restore full-width native Detail conversations with Markdown code blocks, lists and formulas; remove the flattened List-row chat prototype.

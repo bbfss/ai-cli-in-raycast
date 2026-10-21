@@ -15,6 +15,8 @@ export function uiLanguage(): UILanguage {
 // Keep the two Chinese variants explicit: automatic character conversion can
 // change product names or technical meanings. Unknown text always stays intact.
 const translations: Record<string, readonly [string, string]> = {
+  "Exchange {number}": ["第 {number} 轮", "第 {number} 輪"],
+  Reply: ["回复", "回覆"],
   "View Full Conversation": ["查看完整对话", "檢視完整對話"],
   "Wait for Response": ["等待回复", "等待回覆"],
   "Keep drafting · Wait or stop, then send": [

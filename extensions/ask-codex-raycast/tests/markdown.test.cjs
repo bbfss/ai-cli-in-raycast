@@ -1,8 +1,88 @@
 require("./load.cjs");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { renderMarkdown } = require("../src/markdown.ts");
+const { renderMarkdown, stripMessageDividers } = require("../src/markdown.ts");
 const { conversationMarkdown } = require("../src/chat-text.ts");
+
+test("display filtering removes standalone thematic and HTML rules without joining prose or mutating the source", () => {
+  for (const rule of [
+    "---",
+    "***",
+    "___",
+    "- - -",
+    "* * *",
+    "_ _ _",
+    "  -\t- - ",
+    "<hr>",
+    "<HR />",
+    '<hr class="section">',
+  ]) {
+    const source = `First paragraph\r\n\r\n${rule}\r\n\r\nNext paragraph`;
+    const output = stripMessageDividers(source);
+    assert.equal(output, "First paragraph\r\n\r\n\r\n\r\nNext paragraph");
+    assert.equal(
+      source,
+      `First paragraph\r\n\r\n${rule}\r\n\r\nNext paragraph`,
+    );
+    assert.equal(stripMessageDividers(output), output);
+  }
+  assert.equal(
+    stripMessageDividers("before --- after\n<hr> inline text\n\\---\n-*_"),
+    "before --- after\n<hr> inline text\n\\---\n-*_",
+  );
+});
+
+test("divider filtering preserves Setext headings and quoted heading scope", () => {
+  for (const source of [
+    "Title\n---",
+    "Title\n------\n\nBody",
+    "Title\n===",
+    "> Title\n> ---",
+    "Multi-line\nheading\n---",
+  ])
+    assert.equal(stripMessageDividers(source), source);
+  assert.equal(stripMessageDividers("Title\n\n---\nBody"), "Title\n\n\nBody");
+  assert.equal(stripMessageDividers("# Heading\n---"), "# Heading\n");
+  assert.equal(
+    stripMessageDividers("Outside paragraph\n> ---\n\n> Next quote"),
+    "Outside paragraph\n> \n\n> Next quote",
+  );
+});
+
+test("divider filtering preserves fenced YAML, longer fences, quoted fences and unfinished code", () => {
+  for (const source of [
+    "```yaml\n---\nkey: value\n***\n___\n<hr>\n```",
+    "~~~~yaml\n---\n~~~\n___\n~~~~",
+    "> ```yaml\n> ---\n> key: value\n> <hr>\n> ```",
+    "> > ~~~\n> > * * *\n> > ~~~",
+    "- ```yaml\n  ---\n  key: value\n  ```",
+    "```text\n- ```\n---\n***\n```",
+    "```yaml\n---\nkey: value",
+  ])
+    assert.equal(stripMessageDividers(source), source);
+  assert.equal(
+    stripMessageDividers("```yaml\n---\n```\n\n***\n\nAfter"),
+    "```yaml\n---\n```\n\n\n\nAfter",
+  );
+});
+
+test("divider filtering leaves indented code and display math untouched", () => {
+  for (const source of [
+    "    ---\n    ***\n    <hr>",
+    "\t---\n\t___",
+    ">     ---\n>     <hr>",
+    "$$\n---\n___\n$$",
+    "\\[\n---\n***\n\\]",
+    "\\begin{align*}\n---\n<hr>\n\\end{align*}",
+    "> $$\n> ---\n> $$",
+    "$$\n---\nunfinished",
+  ])
+    assert.equal(stripMessageDividers(source), source);
+  assert.equal(
+    stripMessageDividers("$$x$$\n\n---\n\nAfter"),
+    "$$x$$\n\n\n\nAfter",
+  );
+});
 
 test("ordinary line breaks remain visible and paragraph breaks are preserved", () => {
   assert.equal(

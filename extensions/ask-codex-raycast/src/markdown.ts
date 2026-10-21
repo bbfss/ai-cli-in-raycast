@@ -22,6 +22,89 @@ function readableParagraph(line: string): string {
   return [...paragraphs, line.slice(offset)].filter(Boolean).join("\n\n");
 }
 
+/** Remove body dividers for display; leave stored/copied message text intact. */
+export function stripMessageDividers(content: string): string {
+  // Retain original line endings and blank lines, including around a removed
+  // rule, so adjacent paragraphs cannot accidentally join.
+  const parts = content.split(/(\r\n|\r|\n)/);
+  let fence: string | null = null;
+  let mathBlock: string | null = null;
+  let previousParagraph = false;
+  let previousQuoteDepth = 0;
+  for (let index = 0; index < parts.length; index += 2) {
+    const line = parts[index];
+    const quotePrefix = line.match(/^(?: {0,3}> ?)+/)?.[0] || "";
+    const source = line.slice(quotePrefix.length);
+    const quoteDepth = (quotePrefix.match(/>/g) || []).length;
+    // A fence may begin inside a list item. Continuation lines can keep the
+    // list's indentation without repeating its marker.
+    const fenceSource = source.replace(/^ {0,3}(?:[-+*]|\d+[.)])[ \t]+/, "");
+    const marker: RegExpMatchArray | null = (
+      fence ? source : fenceSource
+    ).match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence) {
+      if (
+        marker &&
+        marker[1][0] === fence[0] &&
+        marker[1].length >= fence.length &&
+        !marker[2].trim()
+      )
+        fence = null;
+      previousParagraph = false;
+      continue;
+    }
+    if (/^(?: {4}|\t)/.test(source)) {
+      previousParagraph = false;
+      continue;
+    }
+    if (mathBlock) {
+      if (source.includes(mathBlock)) mathBlock = null;
+      previousParagraph = false;
+      continue;
+    }
+    if (marker) {
+      fence = marker[1];
+      previousParagraph = false;
+      continue;
+    }
+    const display = source.trim().match(/^(\$\$|\\\[|\\begin\{([^}]+)\})/);
+    if (display) {
+      const close =
+        display[1] === "$$"
+          ? "$$"
+          : display[1] === "\\["
+            ? "\\]"
+            : `\\end{${display[2]}}`;
+      if (!source.trim().slice(display[1].length).includes(close))
+        mathBlock = close;
+      previousParagraph = false;
+      continue;
+    }
+    // An uninterrupted dash underline immediately below a paragraph is a
+    // Setext heading, not a thematic rule. Quoted headings stay in their scope.
+    const setext: boolean =
+      previousParagraph &&
+      previousQuoteDepth === quoteDepth &&
+      /^ {0,3}-+[ \t]*$/.test(source);
+    const rule =
+      /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:_[ \t]*){3,}|(?:-[ \t]*){3,})$/.test(
+        source,
+      );
+    const htmlRule = /^ {0,3}<hr\b[^>]*\/?\s*>[ \t]*$/i.test(source);
+    if (!setext && (rule || htmlRule)) {
+      parts[index] = quotePrefix;
+      previousParagraph = false;
+      continue;
+    }
+    previousParagraph =
+      !setext &&
+      Boolean(source.trim()) &&
+      !/^ {0,3}(?:#{1,6}(?:\s|$)|[-+*]\s|\d+[.)]\s|<|\||=+\s*$)/.test(source);
+    previousQuoteDepth = quoteDepth;
+  }
+  return parts.join("");
+}
+
 export function renderMarkdown(content: string): string {
   let fence: string | null = null;
   let fencePrefix = "";
