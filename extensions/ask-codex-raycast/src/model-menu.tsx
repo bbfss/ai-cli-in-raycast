@@ -40,7 +40,7 @@ export function ModelMenu(props: ModelMenuProps) {
   const selected = props.selection || props.current;
   return (
     <ActionPanel.Submenu
-      title={`Model: ${selected.model || "Auto"}`}
+      title={`Model: ${selected.model === "__cli_default__" ? "CLI Default" : selected.model || "Auto"}`}
       icon={Icon.ComputerChip}
       shortcut={
         props.shortcuts === false
@@ -64,7 +64,7 @@ export function ModelMenu(props: ModelMenuProps) {
         {props.models.map((model) => (
           <Action
             key={model.model}
-            title={model.model}
+            title={model.displayName || model.model}
             icon={
               selected.model === model.model
                 ? Icon.Checkmark

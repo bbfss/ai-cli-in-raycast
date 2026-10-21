@@ -69,3 +69,15 @@ test("server requests get explicit rejection, never implicit approval", () => {
   assert.equal(response.id, "permission1");
   assert.equal(response.error.code, -32601);
 });
+
+test("Windows worker environment preserves mixed-case PATH and other CLI settings", () => {
+  const { executableEnv, envValue } = require("../src/executable.ts");
+  const source = { Path: "C:\\Windows\\System32", LocalAppData: "C:\\Users\\Test\\AppData\\Local", CLI_TEST_SETTING: "keep" };
+  const env = executableEnv(["C:\\Tools"], source);
+  assert.ok(env.PATH.includes(source.Path));
+  assert.equal(Object.keys(env).filter(key => key.toLowerCase() === "path").length, 1);
+  assert.equal(env.CLI_TEST_SETTING, "keep");
+  assert.equal(envValue(source, "LOCALAPPDATA"), source.LocalAppData);
+  assert.equal(source.Path, "C:\\Windows\\System32");
+  assert.ok(pathCandidates("win32", "C:\\Users\\Test", { AppData: "C:\\Roaming" }).includes("C:\\Roaming\\npm\\codex.cmd"));
+});

@@ -1,11 +1,13 @@
 import {
   createProviderClient,
   providerCapabilities,
+  isProviderId,
   type ProviderId,
   type ChatClient,
 } from "./provider";
 import { ProviderMenu } from "./provider-menu";
-import { PROVIDERS, ACTIVE_PROVIDER_KEY, storageKeys } from "./session-storage";
+import { PROVIDERS, storageKeys } from "./session-storage";
+import { PROVIDER_COMMANDS, providerForCommand } from "./command-routing";
 import { SetupWizard } from "./setup";
 import { connectionSignature, parseSetup, type Setup } from "./setup-state";
 import {
@@ -13,6 +15,8 @@ import {
   ActionPanel,
   Detail,
   environment,
+  launchCommand,
+  LaunchType,
   List,
   getPreferenceValues,
   Icon,
@@ -51,36 +55,21 @@ export default function AIInRaycast(
   props: LaunchProps<{ arguments: Arguments.Index }>,
 ) {
   const preferences = getPreferenceValues<Preferences>();
-  const [provider, setProvider] = useState<ProviderId | null>(null);
-  const [providerError, setProviderError] = useState("");
-  useEffect(() => {
-    let disposed = false;
-    void LocalStorage.getItem<string>(ACTIVE_PROVIDER_KEY)
-      .then((value) => {
-        if (!disposed)
-          setProvider(value === "antigravity" ? "antigravity" : "codex");
-      })
-      .catch((reason) => {
-        if (!disposed) setProviderError(messageOf(reason));
-      });
-    return () => {
-      disposed = true;
-    };
-  }, []);
-  const signature = connectionSignature(preferences, provider || "codex");
+  const provider = providerForCommand(environment.commandName);
+  const signature = connectionSignature(preferences, provider);
   const launchConsumed = useRef(false);
-  if (!provider)
-    return <Detail isLoading={!providerError} markdown={providerError || ""} />;
   async function changeProvider(value: string) {
-    if (value !== "codex" && value !== "antigravity") return;
+    if (!isProviderId(value) || value === provider) return;
     try {
-      await LocalStorage.setItem(ACTIVE_PROVIDER_KEY, value);
-      setProvider(value);
+      await launchCommand({
+        name: PROVIDER_COMMANDS[value],
+        type: LaunchType.UserInitiated,
+      });
     } catch (reason) {
       await showToast({
         style: Toast.Style.Failure,
         title: "Could Not Switch CLI",
-        message: messageOf(reason),
+        message: `${messageOf(reason)} Enable this command in Raycast Settings → Extensions → AI in Raycast.`,
       });
     }
   }
@@ -346,11 +335,19 @@ function NativeChat(
     void showToast({
       style: Toast.Style.Success,
       title: selection
-        ? [selection.model, selection.effort].filter(Boolean).join(" · ")
+        ? [
+            selection.model === "__cli_default__"
+              ? "CLI Default"
+              : selection.model,
+            selection.effort,
+          ]
+            .filter(Boolean)
+            .join(" · ")
         : "Use Current Conversation Model",
-      message: busy
-        ? "Used for the next reply; steering the current response will still use the original model."
-        : "This setting applies to the next message.",
+      message:
+        busy && capabilities.supportsSteering
+          ? "Used for the next reply; steering the current response will still use the original model."
+          : "This setting applies to the next message.",
     });
   }
 
@@ -378,7 +375,11 @@ function NativeChat(
         return;
       if (event.method === "turn/started") {
         setBusy(true);
-        updateStatus("Thinking · Press Enter to steer");
+        updateStatus(
+          capabilities.supportsSteering
+            ? "Thinking · Press Enter to steer"
+            : "Thinking · You can stop the response",
+        );
       }
       if (event.method === "item/started") {
         const type = asString(asRecord(params.item).type);
@@ -409,7 +410,11 @@ function NativeChat(
             completed,
           }),
         }));
-        updateStatus("Responding · Press Enter to steer");
+        updateStatus(
+          capabilities.supportsSteering
+            ? "Responding · Press Enter to steer"
+            : "Responding · You can stop the response",
+        );
       }
       if (event.method === "turn/completed") {
         const turn = asRecord(params.turn);
@@ -466,6 +471,10 @@ function NativeChat(
       cwd: preferences.workingDirectory,
       codexPath: preferences.codexPath,
       agyPath: preferences.agyPath,
+      qoderPath: preferences.qoderPath,
+      qoderCnPath: preferences.qoderCnPath,
+      workbuddyPath: preferences.workbuddyPath,
+      geminiPath: preferences.geminiPath,
       liveSearch: preferences.liveSearch ?? true,
     });
     clientRef.current = client;
@@ -550,7 +559,9 @@ function NativeChat(
       setReady(true);
       updateStatus(
         client.currentTurnId
-          ? "Thinking · Press Enter to steer"
+          ? capabilities.supportsSteering
+            ? "Thinking · Press Enter to steer"
+            : "Thinking · You can stop the response"
           : "Connected · Press Enter to send",
         Boolean(client.currentTurnId),
       );
@@ -573,6 +584,10 @@ function NativeChat(
   }, [
     props.provider,
     preferences.agyPath,
+    preferences.qoderPath,
+    preferences.qoderCnPath,
+    preferences.workbuddyPath,
+    preferences.geminiPath,
     preferences.codexPath,
     preferences.workingDirectory,
     preferences.sandboxMode,
@@ -642,7 +657,11 @@ function NativeChat(
     const replyId = makeId();
     activeReplyRef.current = replyId;
     setBusy(true);
-    updateStatus("Thinking · Press Enter to steer");
+    updateStatus(
+      capabilities.supportsSteering
+        ? "Thinking · Press Enter to steer"
+        : "Thinking · You can stop the response",
+    );
     setConversation((previous) => ({
       ...previous,
       messages: [
@@ -824,7 +843,9 @@ function NativeChat(
       setError("");
       updateStatus(
         client.currentTurnId
-          ? "Thinking · Press Enter to steer"
+          ? capabilities.supportsSteering
+            ? "Thinking · Press Enter to steer"
+            : "Thinking · You can stop the response"
           : "Session restored · Press Enter to continue chatting",
         Boolean(client.currentTurnId),
       );
@@ -892,8 +913,8 @@ function NativeChat(
           }}
           onAction={async () => {
             try {
-              await clientRef.current?.interrupt();
               updateStatus("Stopping…");
+              await clientRef.current?.interrupt();
             } catch (reason) {
               await reportFailure(reason, "");
             }
@@ -997,6 +1018,8 @@ function NativeChat(
             });
             return;
           }
+          requestPendingRef.current = true;
+          setSwitching(true);
           try {
             if (persistedRef.current)
               save({ ...persistedRef.current, draft: draftRef.current });
@@ -1009,6 +1032,9 @@ function NativeChat(
               title: "Could Not Save Conversation",
               message: messageOf(reason),
             });
+          } finally {
+            requestPendingRef.current = false;
+            if (mountedRef.current) setSwitching(false);
           }
         }}
       />
@@ -1025,7 +1051,9 @@ function NativeChat(
   const chatActions = () => (
     <ActionPanel
       title={[
-        modelSelection?.model || currentModel.model,
+        (modelSelection?.model || currentModel.model) === "__cli_default__"
+          ? "CLI Default"
+          : modelSelection?.model || currentModel.model,
         modelSelection?.effort ?? currentModel.effort,
       ]
         .filter(Boolean)
@@ -1054,7 +1082,7 @@ function NativeChat(
   if (page === "chat") {
     return (
       <Detail
-        navigationTitle="AI in Raycast"
+        navigationTitle={`${capabilities.label} in Raycast`}
         markdown={chatMarkdown}
         isLoading={(!ready && !error) || busy || switching}
         actions={chatActions()}
@@ -1063,7 +1091,7 @@ function NativeChat(
   }
   return (
     <List
-      navigationTitle="AI in Raycast"
+      navigationTitle={`${capabilities.label} in Raycast`}
       filtering={false}
       throttle={false}
       isShowingDetail={false}

@@ -10,6 +10,32 @@ export type Executable = {
   env: NodeJS.ProcessEnv;
 };
 
+// Raycast's Windows worker can expose Path/LocalAppData with their original
+// casing. Worker environment objects do not have process.env's main-thread
+// case-insensitive lookup behavior.
+export function envValue(
+  env: NodeJS.ProcessEnv,
+  name: string,
+): string | undefined {
+  const key = Object.keys(env).find(
+    (key) => key.toLowerCase() === name.toLowerCase(),
+  );
+  return key ? env[key] : undefined;
+}
+
+export function executableEnv(
+  paths: string[],
+  source = process.env,
+): NodeJS.ProcessEnv {
+  const env = { ...source };
+  const inherited = envValue(source, "PATH");
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === "path") delete env[key];
+  }
+  env.PATH = [...paths, inherited].filter(Boolean).join(delimiter);
+  return env;
+}
+
 export function expandHome(value: string, home = homedir()): string {
   return value === "~"
     ? home
@@ -28,9 +54,18 @@ export function pathCandidates(
     return [
       path.join(home, ".codex", "bin", "codex.exe"),
       path.join(home, ".local", "bin", "codex.exe"),
-      ...(env.APPDATA ? [path.join(env.APPDATA, "npm", "codex.cmd")] : []),
-      ...(env.LOCALAPPDATA
-        ? [path.join(env.LOCALAPPDATA, "Programs", "codex", "codex.exe")]
+      ...(envValue(env, "APPDATA")
+        ? [path.join(envValue(env, "APPDATA")!, "npm", "codex.cmd")]
+        : []),
+      ...(envValue(env, "LOCALAPPDATA")
+        ? [
+            path.join(
+              envValue(env, "LOCALAPPDATA")!,
+              "Programs",
+              "codex",
+              "codex.exe",
+            ),
+          ]
         : []),
     ];
   return [
@@ -126,7 +161,7 @@ export async function resolveCodexExecutable(
 ): Promise<Executable> {
   const platform = process.platform;
   const requested = explicitPath?.trim().replace(/^"(.*)"$/, "$1");
-  let inheritedPath = process.env.PATH || "";
+  let inheritedPath = ""; // Additional PATH from a macOS login shell, if needed.
   const choose = (input: string): Executable | null => {
     let file = input;
     if (platform === "win32" && file.endsWith(".ps1"))
@@ -137,16 +172,11 @@ export async function resolveCodexExecutable(
     return {
       command: shell ? windowsShellCommand(file) : file,
       shell,
-      env: {
-        ...process.env,
-        PATH: [
-          dirname(file),
-          inheritedPath,
-          ...pathCandidates(platform, homedir(), process.env).map(dirname),
-        ]
-          .filter(Boolean)
-          .join(delimiter),
-      },
+      env: executableEnv([
+        dirname(file),
+        inheritedPath,
+        ...pathCandidates(platform, homedir(), process.env).map(dirname),
+      ]),
     };
   };
   if (requested) {

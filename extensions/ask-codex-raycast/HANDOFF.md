@@ -2,60 +2,71 @@
 
 ## Start here
 
-Continue developing **AI in Raycast**, a native Raycast chat surface for installed AI CLIs. The human asked to withdraw the old Store application and broaden the extension beyond Codex. Do not reopen the withdrawn application or submit a new Store PR unless asked.
-
 Repository: https://github.com/bbfss/raycast-extensions
-Branch: `feat/ai-in-raycast-multi-cli`
-Extension directory: `extensions/ask-codex-raycast`
-The package's internal name remains `ask-codex-raycast` to retain existing Raycast data. Its visible name is **AI in Raycast**.
 
-Old application https://github.com/raycast/extensions/pull/31456 was confirmed **closed, not merged**, on 2026-10-21. Previous integration PR #32387 is also closed. The new development branch is separate from the old PR head.
+Branch: `feat/ai-in-raycast-multi-cli`
+
+Extension directory: `extensions/ask-codex-raycast`
+
+**Do not reopen withdrawn Store PRs or submit a new Store application.** The user explicitly reaffirmed this constraint. Previous PRs #31456 and #32387 are closed, not publication evidence.
+
+The latest user correction is a **suite of independent commands**, not only one chat command with a provider dropdown. The extension is **AI in Raycast**; its six root commands are **Codex in Raycast**, **Antigravity in Raycast**, **Qoder in Raycast**, **Qoder CN in Raycast**, **WorkBuddy in Raycast**, and **Gemini in Raycast**. Each command can be enabled/disabled with Raycast's native checkbox in Settings → Extensions → AI in Raycast. The original extension ID `ask-codex-raycast` and Codex command ID `index` are preserved.
 
 ## Implemented
 
-- `provider.ts`: common ChatClient contract and explicit capabilities; Codex retains its app-server bridge.
-- `provider-antigravity.ts`: installed `agy` executable, stream-json lifecycle, model discovery, stable local thread IDs mapped to explicit remote conversation IDs. No implicit `--continue` of a globally recent session.
-- `session-storage.ts`: separate history, drafts, setup, and model keys per CLI. Codex retains all original keys.
-- `provider-menu.tsx`: Gemini-assisted native Provider menu, Cmd/Ctrl+P, reselecting the current provider is a no-op.
-- Root provider switching remounts setup/chat after saving the old conversation. Active replies must stop before switching.
-- Setup checks the chosen local CLI and requires an available model. The native composer/Actions order includes Provider, Model, supported Effort Level, and New Chat.
-- The UI remains a full-width Detail with a floating Enter-to-compose/Enter-to-send input; no left placeholder row, no separate app. Native Markdown/math and saved drafts are preserved.
-- Antigravity has no in-progress steering here, and no separate effort picker; choose its model variants. Its `--sandbox --mode plan` is not represented as identical to Codex's sandbox guarantees.
+- `command-routing.ts` maps each command to a provider. An old active-provider preference cannot redirect a named command. Cross-CLI switching saves the current state and uses Raycast `launchCommand`, which respects native command disablement; prompts and conversation data are not forwarded.
+- `provider.ts`: shared ChatClient contract and capabilities. Codex retains its app-server implementation; only Codex exposes steering and effort choices.
+- `provider-antigravity.ts`: native `agy`, live model discovery, explicit conversation mapping, stream parsing, bounded output, timeout and process-tree cancellation. Completion waits for process close and mapping persistence. Unexpected resumed IDs fail without overwriting saved mappings.
+- `provider-cli.ts`: Qoder, Qoder CN, WorkBuddy and Gemini subprocess lifecycle, bounded mapping persistence, exact resume, cancellation, overlap protection, and explicit terminal success. Process exit 0 alone is insufficient.
+- `cli-protocols.ts`: separate Gemini vs Qoder/WorkBuddy event schemas. Ignore reasoning, tool payloads and nested subagent sessions. Never implicitly resume the globally latest session.
+- `cli-executable.ts`: native/known npm Node entrypoint discovery without shell prompt interpolation. Handles Windows extensionless npm dispatchers as well as `.cmd` wrappers. Custom WorkBuddy bundles use a process-only bundle selector. Node must be available on PATH.
+- `executable.ts`: preserve all environment settings while handling mixed-case Windows `Path`/`AppData` keys without duplicate PATH entries. Antigravity auto-detection includes its standard LocalAppData install.
+- `session-storage.ts`: history/drafts/model/setup isolated by provider, original Codex keys preserved. Mapping keys retain the original AGY format.
+- Native full-width Detail and floating Enter composer remain. Gemini Flash design input informed provider-specific page titles, calm empty states and concise two-step setup. Setup distinguishes executable/catalog availability from authenticated inference. CLI Default is an explicit choice where there is no reliable model catalog.
 
-## Verified and limitations
+## Validation on Windows
 
-At handoff, build, TypeScript, lint and **43 tests** passed in the Mac development workspace. Tests cover provider storage isolation, session mapping/resume, model parsing, draft acknowledgement races, setup migration, Markdown and Codex protocol behavior.
+Raycast 2.8.2; Node 24.21.0. Build, standalone TypeScript, lint and **115 tests passed**. Tests execute production code, including real Node fixture subprocesses, cancellation/process cleanup, persisted mapping races, invalid identity, exit-zero failures, command routing, disabled launch errors and UI callback races.
 
-A real Antigravity adapter smoke run completed two turns: remember a test word, then recover it using the explicit conversation ID. This did not change global CLI configuration. Windows native UI and the final combined provider switch UI have not been manually verified. Test the exact commit you pull if there are later changes.
+| Provider | Real adapter test | Native Raycast test |
+| --- | --- | --- |
+| Codex (`gpt-6.1-sol`, low) | Remember → close/recreate → exact resume → cancel → continue passed | Setup, send, switch away/back, correct remembered word, Stop Response and Stopped state passed |
+| Antigravity 1.2.16 (`gemini-3.8-flash-high`) | Remember → close/recreate → exact resume → cancel → continue passed again after lifecycle changes | Setup, send, isolated history, switch away/back, correct remembered word, Stop Response and no remaining agy process passed |
+| Qoder CN 1.1.74 (`Fast`) | Actual inference, restart/resume, cancel/continue passed; a separate direct probe canceled at first text delta and then recovered the original word | Independent command, connection/model setup and response passed |
+| Qoder international | Not installed/independently tested here | Entry and routing available; do not claim native inference |
+| WorkBuddy AI embedded CLI | Launch/version/model help work; actual result is authentication-required even with process exit 0 | Custom local CLI path configured; authenticated inference remains blocked |
+| Gemini CLI 0.65.0 | Isolated workspace-local package launches; account returns `UNSUPPORTED_CLIENT`, recommending Antigravity. Also requires explicit workspace trust in this test directory | Local entrypoint path configured; inference/resume not verified |
 
-Antigravity requires its native executable on Windows; `.cmd/.bat/.ps1` wrappers are intentionally rejected. Install/sign in on that computer independently. Local Raycast storage and CLI sign-ins do not transfer with Git. Never copy auth/token stores into the repository.
+Native Settings showed all six independent command checkboxes. Temporarily disabled Qoder: attempting to switch from Qoder CN produced `No enabled command`, and the original conversation stayed intact. Re-enabled Qoder afterward. WorkBuddy's custom installation path and Gemini's workspace-local Node entrypoint were saved through the native preferences UI, not database edits.
 
-## Requested collaboration and Magpie research
+**Keyboard limitation:** Windows UI Automation successfully invoked send/saved-draft actions and verified results. Automated SendKeys Enter was unreliable (menu focus/closure); do not claim a complete physical Enter-to-send keyboard acceptance test. No conclusion that this is a product defect has been established. Saved drafts survived these attempts.
 
-The human explicitly requested Gemini for front-end assistance and Magpie's **国模之光** for part of the backend work. Both were actually called:
+No Windows or macOS Store submission was made. Previous macOS baseline had 43 tests; the expanded suite needs a fresh macOS run. Existing Store metadata/brand icons still reflect earlier Codex branding and need review before any future publication.
 
-- Gemini via installed `agy`, `gemini-3.8-flash-high`, isolated sandbox/new project, produced provider-menu recommendations. Only task constraints were supplied, not private chat history or credentials.
-- Magpie local `models codex` and `group never-stuck` identified `group/never-stuck` as **国模之光**. The actual call returned `deepseek-v4.1-flash-free`. Its feedback highlighted durable session IDs, bounded streaming output, cancellation of process trees, and interactive approval handling. The result was truncated, so do not claim a complete independent review.
+## Permissions and authentication boundaries
 
-The authoritative repository is https://github.com/yetone/magpie (confirmed from the installed binary and public GitHub README). Its README describes a local gateway for OpenAI Chat/Responses, Anthropic Messages and Gemini, with separate agents/providers. The source tree includes `internal/gateway/chat.go` and `internal/sessions/calls_agy.go`; their implementations have **not yet been inspected in depth**. The current adapter is based on installed CLI help and actual stream-json traces, not copied Magpie code. Continue that source comparison next; do not recreate authentication from browser cookies or expose credentials.
+Qoder CN received no-tools, strict-empty-MCP, hooks-disabled, `dont_ask` flags; its actual init confirmed empty tools and MCP. WorkBuddy receives its supported `dontAsk` equivalent, but init still advertised tools; effective restriction is unverified because authentication failed. Gemini uses default approval mode and existing CLI configuration with extensions disabled; it is not advertised as equivalent to Codex's sandbox. Antigravity plan+sandbox also has its own semantics.
 
-Mac-only collaboration request/response artifacts were saved outside this repository under the original task workspace `output/ai-in-raycast-2026-10-21` and possibly the backend research output. They are not required to build and should not be blindly published. Their relevant conclusions are summarized above.
+The extension never copies credentials or browser cookies, changes global CLI configuration, or automatically authorizes interactive approvals. Local session transcripts created by the CLIs are expected. Git transfers source, not Raycast LocalStorage or authentication. Native WorkBuddy login and Gemini account eligibility cannot be fixed by importing Magpie/desktop tokens.
+
+## Collaboration and Magpie research
+
+The user explicitly requested Magpie 国模之光 and Gemini Flash 3.8 assistance.
+
+- Magpie `group/never-stuck` completed a real backend review this round. It emphasized durable identity before success, close/cancel cleanup, and catalog-vs-auth distinction. The requested routing group is recorded; do not infer which underlying model answered from the group name.
+- Magpie's `opencode-zen/gemini-3.8-flash` failed with HTTP 402 (insufficient account funds). No top-up or account change was attempted.
+- After the user's visual-design request, native Antigravity `gemini-3.8-flash-high` completed a real UI review. Only selected source/constraints were supplied. Adopted page hierarchy and setup copy; rejected invented shortcuts, namespace changes that would lose old history, and unsupported claims. Do not claim this successful Gemini call used Magpie.
+- Read Magpie source at `ba319a7587923fc7a4ea3859658244d591261a59`; detailed evidence and pinned links are in [MAGPIE_RESEARCH.md](MAGPIE_RESEARCH.md). Its AGY usage-log reader is not a live chat adapter. Gateway cancellation propagates into retry waits; requested route and actual model/account identity are distinct. No Magpie authentication implementation was copied.
+- Gemini schema was cross-checked against official google-gemini/gemini-cli source at `c1740d29301a73a47dc3501c1aecc7eb00c0ee58` (`docs/cli/headless.md`, output event types, config flags, exact UUID resume).
 
 ## Next steps
 
-1. Install dependencies and run build, types, tests, and lint on the receiving computer.
-2. Verify provider switching, setup, model selection, Enter composer, cancellation and restart/resume in real Raycast; verify no cross-provider conversation leakage.
-3. Read the Magpie gateway/session implementations and complete the reference comparison and improve the adapter contract only where evidence supports it.
-4. Review Antigravity authentication-check limits: listing models is not proof of inference entitlement or a live credential check.
-5. Update screenshots/branding before any new Store submission. Existing metadata screenshot shows the earlier Codex branding and is not evidence of the multi-provider UI.
+1. Resolve WorkBuddy native CLI sign-in and Gemini account eligibility through their supported user flows, then run real inference/resume/cancel tests. International Qoder also needs its own installed/signed-in test.
+2. Finish manual physical Enter keyboard acceptance, especially Windows focus behavior; verify a fresh macOS build.
+3. Expand provider catalogs only from installed CLI help/official protocol evidence. Do not invent model IDs or assume a desktop login grants headless access.
+4. Before any future user-authorized Store submission, review suite branding/screenshots and current Store requirements. No publication is currently authorized.
 
-## Product constraints
-
-Keep the native window and compact full-width Markdown UI. Keep history behind an explicit action, do not use prompt text as history search. Effort selection is a native list: select Effort Level, Enter, choose a supported value, Enter. Raycast's public menu API has no hover callbacks or draggable slider.
-
-The Raycast repository `.github/copilot-instructions.md` requires US-English UI and avoids custom localization. The earlier ten-language implementation was removed in commit a6fed0ab after verified review feedback; it remains in Git history. Model responses may be in Chinese or the user's requested language.
-
-## Commands (extension directory)
+## Commands
 
 ```sh
 npm ci
@@ -66,4 +77,4 @@ npm run lint
 npm run dev
 ```
 
-Do not infer Store publication from successful CI or bot review. The previous application was deliberately withdrawn.
+Build before standalone types so Raycast generates preference/argument definitions. UI remains US English per upstream repository instructions; responses may use the user's requested language. Test traces, private collaboration responses and screenshots remain outside the repository in the task workspace, with a concise user-facing report under `outputs/`.

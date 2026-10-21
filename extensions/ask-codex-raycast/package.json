@@ -17,17 +17,133 @@
   "commands": [
     {
       "name": "index",
-      "title": "AI in Raycast",
-      "subtitle": "Chat with Local CLI",
-      "description": "Continue conversations with installed local AI CLIs inside Raycast, with isolated sessions and native model controls.",
+      "title": "Codex in Raycast",
+      "subtitle": "AI in Raycast",
+      "description": "Chat with your local Codex CLI, with its own saved conversations and model choice.",
       "mode": "view",
       "keywords": [
-        "chat",
         "ai",
+        "chat",
         "terminal",
         "codex",
+        "chatgpt"
+      ],
+      "arguments": [
+        {
+          "name": "prompt",
+          "type": "text",
+          "placeholder": "Optional question to start with",
+          "required": false
+        }
+      ],
+      "icon": "command-icon.png",
+      "disabledByDefault": false
+    },
+    {
+      "name": "antigravity",
+      "title": "Antigravity in Raycast",
+      "subtitle": "AI in Raycast",
+      "description": "Chat with your local Antigravity CLI, with its own saved conversations and model choice.",
+      "mode": "view",
+      "keywords": [
+        "ai",
+        "chat",
+        "terminal",
         "antigravity",
-        "agy",
+        "agy"
+      ],
+      "arguments": [
+        {
+          "name": "prompt",
+          "type": "text",
+          "placeholder": "Optional question to start with",
+          "required": false
+        }
+      ],
+      "icon": "command-icon.png",
+      "disabledByDefault": false
+    },
+    {
+      "name": "qoder",
+      "title": "Qoder in Raycast",
+      "subtitle": "AI in Raycast",
+      "description": "Chat with your local Qoder CLI, with its own saved conversations and model choice.",
+      "mode": "view",
+      "keywords": [
+        "ai",
+        "chat",
+        "terminal",
+        "qoder"
+      ],
+      "arguments": [
+        {
+          "name": "prompt",
+          "type": "text",
+          "placeholder": "Optional question to start with",
+          "required": false
+        }
+      ],
+      "icon": "command-icon.png",
+      "disabledByDefault": false
+    },
+    {
+      "name": "qoder-cn",
+      "title": "Qoder CN in Raycast",
+      "subtitle": "AI in Raycast",
+      "description": "Chat with your local Qoder CN CLI, with its own saved conversations and model choice.",
+      "mode": "view",
+      "keywords": [
+        "ai",
+        "chat",
+        "terminal",
+        "qoder",
+        "qodercn"
+      ],
+      "arguments": [
+        {
+          "name": "prompt",
+          "type": "text",
+          "placeholder": "Optional question to start with",
+          "required": false
+        }
+      ],
+      "icon": "command-icon.png",
+      "disabledByDefault": false
+    },
+    {
+      "name": "workbuddy",
+      "title": "WorkBuddy in Raycast",
+      "subtitle": "AI in Raycast",
+      "description": "Chat with your local WorkBuddy CLI, with its own saved conversations and model choice.",
+      "mode": "view",
+      "keywords": [
+        "ai",
+        "chat",
+        "terminal",
+        "workbuddy",
+        "codebuddy"
+      ],
+      "arguments": [
+        {
+          "name": "prompt",
+          "type": "text",
+          "placeholder": "Optional question to start with",
+          "required": false
+        }
+      ],
+      "icon": "command-icon.png",
+      "disabledByDefault": false
+    },
+    {
+      "name": "gemini",
+      "title": "Gemini in Raycast",
+      "subtitle": "AI in Raycast",
+      "description": "Chat with your local Gemini CLI, with its own saved conversations and model choice.",
+      "mode": "view",
+      "keywords": [
+        "ai",
+        "chat",
+        "terminal",
         "gemini"
       ],
       "arguments": [
@@ -38,7 +154,8 @@
           "required": false
         }
       ],
-      "icon": "command-icon.png"
+      "icon": "command-icon.png",
+      "disabledByDefault": false
     }
   ],
   "preferences": [
@@ -96,6 +213,38 @@
       "type": "textfield",
       "title": "Antigravity CLI Path",
       "description": "Optional absolute path to the installed agy executable. Uses your existing CLI sign-in.",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "qoderPath",
+      "type": "textfield",
+      "title": "Qoder CLI Path",
+      "description": "Optional absolute executable or Node entrypoint path. Uses this CLI’s own sign-in. Leave empty for automatic discovery.",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "qoderCnPath",
+      "type": "textfield",
+      "title": "Qoder CN CLI Path",
+      "description": "Optional absolute executable or Node entrypoint path. Uses this CLI’s own sign-in. Leave empty for automatic discovery.",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "workbuddyPath",
+      "type": "textfield",
+      "title": "WorkBuddy CLI Path",
+      "description": "Optional absolute executable or Node entrypoint path. Uses this CLI’s own sign-in. Leave empty for automatic discovery.",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "geminiPath",
+      "type": "textfield",
+      "title": "Gemini CLI Path",
+      "description": "Optional absolute executable or Node entrypoint path. Uses this CLI’s own sign-in. Leave empty for automatic discovery.",
       "required": false,
       "default": ""
     }

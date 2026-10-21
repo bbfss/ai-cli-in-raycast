@@ -16,3 +16,16 @@ test('CLI connection setup changes only for its own executable settings',()=>{
  assert.notEqual(connectionSignature(base,'antigravity'),connectionSignature({...base,agyPath:'/other'},'antigravity'));
  assert.notEqual(connectionSignature(base),connectionSignature(base,'antigravity'));
 });
+
+for (const [provider, key] of [['antigravity','agyPath'],['qoder','qoderPath'],['qoder-cn','qoderCnPath'],['workbuddy','workbuddyPath'],['gemini','geminiPath']]) {
+ test(`${provider} connection signature uses its own path and ignores other providers`,()=>{
+  const base={};const changed={[key]:'/new/path'};
+  assert.notEqual(connectionSignature(base,provider),connectionSignature(changed,provider));
+  assert.equal(connectionSignature(base,'codex'),connectionSignature(changed,'codex'));
+ });
+}
+test('all six providers have distinct storage without changing Codex legacy keys',()=>{
+ const providers=['codex','antigravity','qoder','qoder-cn','workbuddy','gemini'];
+ const keys=providers.flatMap(p=>Object.values(storageKeys(p)));
+ assert.equal(new Set(keys).size,24);
+});

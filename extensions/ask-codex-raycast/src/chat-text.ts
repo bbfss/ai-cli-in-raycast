@@ -35,6 +35,6 @@ export function conversationMarkdown(
   return (
     header +
     (cards.join("\n\n---\n\n") ||
-      "**AI in Raycast**\n\nPress Enter to open the message composer, enter your message, and press Enter to send. Replies and follow-ups will stay in the same conversation.")
+      `## ${assistant} in Raycast\n\nYour local CLI, ready for a conversation.\n\nPress Enter to open the message composer, enter your message, and press Enter to send.\n\n| Shortcut | Action |\n| --- | --- |\n| ${process.platform === "darwin" ? "⌘" : "Ctrl"}+M | Choose a model |\n| ${process.platform === "darwin" ? "⌘" : "Ctrl"}+P | Switch CLI |\n\n*Part of AI in Raycast · This CLI has its own chats, drafts, and model choice.*`)
   );
 }

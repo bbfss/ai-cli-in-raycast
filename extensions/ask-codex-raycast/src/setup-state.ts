@@ -4,6 +4,10 @@ export const SETUP_KEY = "codex-in-raycast.setup.v1";
 export type ConnectionPreferences = {
   codexPath?: string;
   agyPath?: string;
+  qoderPath?: string;
+  qoderCnPath?: string;
+  workbuddyPath?: string;
+  geminiPath?: string;
   workingDirectory?: string;
   sandboxMode?: string;
   liveSearch?: boolean;
@@ -22,7 +26,15 @@ export function connectionSignature(
   if (provider !== "codex")
     return JSON.stringify([
       provider,
-      preferences.agyPath?.trim() || "",
+      (
+        {
+          antigravity: preferences.agyPath,
+          qoder: preferences.qoderPath,
+          "qoder-cn": preferences.qoderCnPath,
+          workbuddy: preferences.workbuddyPath,
+          gemini: preferences.geminiPath,
+        }[provider] || ""
+      ).trim(),
       preferences.workingDirectory?.trim() || "",
       preferences.sandboxMode || "read-only",
     ]);

@@ -17,6 +17,7 @@ import { ProviderMenu } from "./provider-menu";
 import { PROVIDERS, storageKeys } from "./session-storage";
 import {
   createProviderClient,
+  providerCapabilities,
   type ChatClient,
   type ProviderId,
 } from "./provider";
@@ -70,6 +71,10 @@ export function SetupWizard({
       cwd: preferences.workingDirectory,
       codexPath: preferences.codexPath,
       agyPath: preferences.agyPath,
+      qoderPath: preferences.qoderPath,
+      qoderCnPath: preferences.qoderCnPath,
+      workbuddyPath: preferences.workbuddyPath,
+      geminiPath: preferences.geminiPath,
       liveSearch: preferences.liveSearch ?? true,
     });
     clientRef.current = client;
@@ -145,23 +150,28 @@ export function SetupWizard({
       onAction={openExtensionPreferences}
     />
   );
-  const title = "Set Up AI in Raycast";
+  const label = providerCapabilities(provider).label;
+  const title = `Set Up ${label} in Raycast`;
   if (step === 1)
     return (
       <Detail
         navigationTitle={title}
         isLoading={checking}
         markdown={[
-          "### 1 of 2 · CLI Connection",
+          `## ${label} in Raycast`,
+          "**1 of 2 · Connect your CLI**",
           provider === "codex"
             ? "Install Codex CLI and run `codex login` first."
-            : "Install Antigravity CLI (`agy`) and sign in using its own terminal interface first.",
-          "This check connects to your local CLI, reads its sign-in status and loads its model catalog. It does not send a prompt. Actual model access is confirmed when you send a message.",
+            : `Install ${label} CLI and sign in from your terminal first.`,
+          provider === "codex"
+            ? "Check the local connection, sign-in status, and available models. No prompt is sent; model access is confirmed with your first message."
+            : "Find the local CLI and its model choices. No prompt is sent; sign-in and model access are confirmed with your first message.",
           checking
             ? "Checking Connection…"
             : error
               ? `**Connection check failed**\n\n${error.replace(/[<>]/g, "")}`
-              : "Press Enter to check your connection.",
+              : "Press Enter to connect. Your chats and model choice stay with this CLI.",
+          "*AI in Raycast · Enable or disable each CLI command in Raycast Settings → Extensions.*",
         ].join("\n\n")}
         actions={
           <ActionPanel>
@@ -213,7 +223,11 @@ export function SetupWizard({
     >
       <Form.Description
         title="2 of 2 · Default Model"
-        text="CLI connected. Choose a model and effort level. You can change them later in Actions."
+        text={
+          provider === "codex"
+            ? "CLI connected. Choose a model and effort level. You can change them later in Actions."
+            : "Choose a model, or CLI Default to use the CLI's own choice. Sign-in and model access have not been verified yet."
+        }
       />
       <Form.Dropdown
         id="model"
@@ -230,7 +244,7 @@ export function SetupWizard({
           <Form.Dropdown.Item
             key={entry.model}
             value={entry.model}
-            title={entry.model}
+            title={entry.displayName || entry.model}
           />
         ))}
       </Form.Dropdown>

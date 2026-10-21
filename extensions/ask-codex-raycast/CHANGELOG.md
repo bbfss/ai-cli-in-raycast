@@ -1,4 +1,13 @@
-# Changelog
+# AI in Raycast
+
+## [Multi-CLI Suite] - {PR_MERGE_DATE}
+
+- Add six independent commands under AI in Raycast, each with native Raycast enable/disable controls and isolated history, drafts and model settings.
+- Add Qoder, Qoder CN, WorkBuddy and Gemini adapters with exact native session mappings.
+- Fix Windows worker environment and npm entrypoint discovery without shell interpolation.
+- Wait for process cleanup and durable session saves; prevent overlapping sends, switches and stale stop labels.
+- Refine native setup and empty states with Gemini Flash design input; preserve the full-width chat and floating composer.
+- Keep Store publication withdrawn.
 
 ## [Development Refactor] - 2026-10-21
 
