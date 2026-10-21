@@ -55,7 +55,7 @@
           "required": false
         }
       ],
-      "icon": "chat-icon.png",
+      "icon": "provider-codex.png",
       "disabledByDefault": false
     },
     {
@@ -79,7 +79,7 @@
           "required": false
         }
       ],
-      "icon": "chat-icon.png",
+      "icon": "provider-antigravity.png",
       "disabledByDefault": false
     },
     {
@@ -102,7 +102,7 @@
           "required": false
         }
       ],
-      "icon": "chat-icon.png",
+      "icon": "provider-qoder.png",
       "disabledByDefault": false
     },
     {
@@ -126,7 +126,7 @@
           "required": false
         }
       ],
-      "icon": "chat-icon.png",
+      "icon": "provider-qoder.png",
       "disabledByDefault": false
     },
     {
@@ -150,7 +150,7 @@
           "required": false
         }
       ],
-      "icon": "chat-icon.png",
+      "icon": "provider-workbuddy.png",
       "disabledByDefault": false
     },
     {
@@ -173,7 +173,7 @@
           "required": false
         }
       ],
-      "icon": "chat-icon.png",
+      "icon": "provider-gemini.png",
       "disabledByDefault": false
     },
     {

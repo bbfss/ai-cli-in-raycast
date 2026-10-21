@@ -83,7 +83,6 @@ function chat(t, provider = "antigravity", initialDraft = "") {
   const launches = [];
   const toasts = [];
   const timeline = [];
-  let lineSplits = 0;
   const prompts = [],
     instructions = [];
   const client = {
@@ -180,22 +179,14 @@ function chat(t, provider = "antigravity", initialDraft = "") {
           supportsSteering: p === "codex",
           supportsEffort: p === "codex",
         }),
+        providerIcon: (p) => `provider-${p}.png`,
       };
     if (id === "./provider-menu") return { ProviderMenu: "providers" };
+    if (id === "./message-composer") return { MessageComposer: "composer" };
     if (id === "./model-menu")
       return { ModelMenu: "models", EffortMenu: "efforts" };
     if (id === "./setup") return { SetupWizard: "setup" };
     if (id === "./history") return { useSessionHistory: () => ({}) };
-    if (id === "./chat-text") {
-      const production = require("../src/chat-text.ts");
-      return {
-        ...production,
-        splitChatLines: (...args) => {
-          lineSplits++;
-          return production.splitChatLines(...args);
-        },
-      };
-    }
     return require(path.resolve(path.dirname(filename), id + ".ts"));
   };
   const source = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
@@ -249,59 +240,28 @@ function chat(t, provider = "antigravity", initialDraft = "") {
         await new Promise(setImmediate);
         render();
       }
-      assert.equal(find(api.List).isLoading, false);
+      assert.equal(find("composer").ready, true);
     },
-    input: () => find(api.List),
-    selectRow: (id) => find(api.List).onSelectionChange(id),
+    input: () => find("composer"),
+    view: () => render(),
     menuCounts: () => {
       const tree = nodes(render());
       return {
-        full: tree.filter((node) => node.type === "push").length,
+        composers: tree.filter((node) => node.type === "composer").length,
         models: tree.filter((node) => node.type === "models").length,
         providers: tree.filter((node) => node.type === "providers").length,
       };
     },
-    get lineSplits() {
-      return lineSplits;
-    },
     send: (text) => {
-      if (text !== undefined && text !== find(api.List).searchText)
-        find(api.List).onSearchTextChange(text);
-      return nodes(render())
-        .find((node) => node.type === Action)
-        .props.onAction();
+      if (text !== undefined && text !== find("composer").draft)
+        find("composer").onChange(text);
+      const input = find("composer");
+      return input.onSend(input.draft);
     },
-    clear: () =>
-      nodes(render())
-        .find(
-          (node) => node.type === Action && node.props.title === "Clear Draft",
-        )
-        .props.onAction(),
-    primary: () => nodes(render()).find((node) => node.type === Action).props,
-    row: () => find(api.List.Item),
-    rows: () =>
-      nodes(render())
-        .filter((node) => node.type === api.List.Item)
-        .map((node) => node.props),
-    messageRows: () =>
-      nodes(render())
-        .filter(
-          (node) =>
-            node.type === api.List.Item &&
-            !/^(status:|draft:|draft-note:)/.test(node.props.id),
-        )
-        .map((node) => node.props),
-    rowEnter: (index) => {
-      const row = nodes(render()).filter((node) => node.type === api.List.Item)[
-        index
-      ];
-      return nodes(row.props.actions)
-        .find((node) => node.type === Action)
-        .props.onAction();
-    },
+    clear: () => find("composer").onChange(""),
     providers: () => find("providers"),
     models: () => find("models"),
-    markdown: () => find("push").target.props.markdown,
+    markdown: () => render().props.markdown,
     stop: () =>
       nodes(render())
         .find(
@@ -393,24 +353,20 @@ function chat(t, provider = "antigravity", initialDraft = "") {
   };
 }
 
-test("native conversation keeps the input and full-width message rows on the same page", async (t) => {
+test("native conversation uses full-width Markdown and one floating composer", async (t) => {
   const ui = chat(t);
   await ui.ready();
-  assert.equal(ui.input().filtering, false);
-  assert.equal(ui.input().throttle, false);
-  assert.equal(ui.input().isShowingDetail, false);
-  assert.equal(ui.input().selectedItemId, undefined);
-  assert.equal(ui.rows().length, 0);
-  assert.equal(ui.primary().title, "Send Message");
-  ui.input().onSearchTextChange("literal $HOME `text`");
+  assert.equal(ui.view().type, "detail");
+  assert.equal(ui.view().props.metadata, undefined);
+  assert.deepEqual(ui.menuCounts(), { composers: 1, models: 1, providers: 1 });
+  ui.input().onChange("literal $HOME text");
   await ui.send();
-  assert.deepEqual(ui.prompts, ["literal $HOME `text`"]);
-  assert.equal(ui.input().searchText, "");
-  assert.equal(ui.messageRows()[0].title, "literal $HOME `text`");
-  assert.ok(ui.rows().every((row) => !row.detail));
+  assert.deepEqual(ui.prompts, ["literal $HOME text"]);
+  assert.equal(ui.input().draft, "");
+  assert.match(ui.markdown(), /literal \$HOME text/);
 });
 
-test("two exchanges remain visible in order, streaming updates the rows, and typing does not filter history", async (t) => {
+test("two exchanges and streaming Markdown remain complete without multiplying controls", async (t) => {
   const ui = chat(t);
   await ui.ready();
   await ui.send("first question");
@@ -418,75 +374,41 @@ test("two exchanges remain visible in order, streaming updates the rows, and typ
   ui.complete();
   await ui.send("second question");
   ui.delta("second ");
-  assert.deepEqual(
-    ui.messageRows().map((row) => row.title),
-    ["second question", "second ", "first question", "first answer"],
-  );
+  assert.match(ui.markdown(), /second /);
   ui.delta("answer");
-  assert.deepEqual(
-    ui.messageRows().map((row) => row.title),
-    ["second question", "second answer", "first question", "first answer"],
-  );
   ui.complete();
-  ui.input().onSearchTextChange("draft matching no older messages");
-  assert.equal(ui.input().filtering, false);
-  assert.deepEqual(
-    ui.messageRows().map((row) => row.title),
-    ["second question", "second answer", "first question", "first answer"],
+  const output = ui.markdown();
+  assert.ok(
+    output.indexOf("second question") < output.indexOf("second answer"),
   );
-  await ui.rowEnter(ui.rows().length - 1);
+  assert.ok(output.indexOf("second answer") < output.indexOf("first question"));
+  assert.ok(output.indexOf("first question") < output.indexOf("first answer"));
+  ui.input().onChange("unrelated draft");
+  assert.equal(ui.markdown(), output);
+  assert.deepEqual(ui.menuCounts(), { composers: 1, models: 1, providers: 1 });
+  await ui.send();
   assert.deepEqual(ui.prompts, [
     "first question",
     "second question",
-    "draft matching no older messages",
+    "unrelated draft",
   ]);
-  assert.equal(ui.input().searchText, "");
-});
-
-test("hundreds of history lines serialize only one full action tree and input does not rewrap history", async (t) => {
-  const ui = chat(t);
-  await ui.ready();
-  await ui.send("long reply");
-  ui.delta(
-    Array.from({ length: 500 }, (_, index) => `history line ${index}`).join(
-      "\n",
-    ),
-  );
-  ui.complete();
-  assert.equal(ui.messageRows().length, 501);
-  assert.deepEqual(ui.menuCounts(), { full: 1, models: 1, providers: 1 });
-  assert.equal(ui.input().actions, undefined);
-  assert.equal(ui.input().selectedItemId, ui.rows()[0].id);
-  const oldRow = ui.rows().at(-1).id;
-  ui.selectRow(oldRow);
-  assert.equal(ui.input().selectedItemId, oldRow);
-  assert.deepEqual(ui.menuCounts(), { full: 1, models: 1, providers: 1 });
-  const wrapped = ui.lineSplits;
-  ui.input().onSearchTextChange("new draft");
-  ui.input();
-  assert.equal(ui.lineSplits, wrapped);
-  ui.selectRow("row-no-longer-present");
-  assert.equal(ui.input().selectedItemId, ui.rows()[0].id);
-  assert.deepEqual(ui.menuCounts(), { full: 1, models: 1, providers: 1 });
-  await ui.rowEnter(ui.rows().length - 1);
-  assert.deepEqual(ui.prompts, ["long reply", "new draft"]);
 });
 
 test("non-steering reply permits drafting but neither auto-sends nor makes Stop the Enter action", async (t) => {
   const ui = chat(t);
   await ui.ready();
   await ui.send("first");
-  ui.input().onSearchTextChange("next draft");
-  assert.equal(ui.primary().title, "Wait for Response");
-  assert.ok(ui.rows().some((row) => /Keep drafting/.test(row.title)));
+  ui.input().onChange("next draft");
+  assert.equal(ui.input().busy, true);
+  assert.equal(ui.input().canSteer, false);
   await ui.send();
   assert.equal(ui.interrupted, 0);
   assert.equal(ui.started, 1);
-  assert.equal(ui.input().searchText, "next draft");
+  assert.equal(ui.input().draft, "next draft");
   ui.complete();
   await new Promise(setImmediate);
   assert.equal(ui.started, 1);
-  assert.equal(ui.primary().title, "Send Message");
+  assert.equal(ui.input().busy, false);
   await ui.send();
   assert.deepEqual(ui.prompts, ["first", "next draft"]);
 });
@@ -495,78 +417,59 @@ test("steering is available only for a capable active provider", async (t) => {
   const ui = chat(t, "codex");
   await ui.ready();
   await ui.send("first");
-  ui.input().onSearchTextChange("additional instructions");
-  assert.equal(ui.primary().title, "Send Instructions");
+  ui.input().onChange("additional instructions");
+  assert.equal(ui.input().busy, true);
+  assert.equal(ui.input().canSteer, true);
   await ui.send();
   assert.deepEqual(ui.instructions, ["additional instructions"]);
   assert.deepEqual(ui.prompts, ["first"]);
 });
 
-test("an existing multiline draft is visible, resists search normalization, and sends its original text", async (t) => {
-  const raw = "  first\r\n```raw\n**still visible**\n```\nlast  ";
+test("restored multiline draft can be edited and sent without truncating its content", async (t) => {
+  const raw =
+    "  first\r\n" + "\x60\x60\x60raw\n**still visible**\n\x60\x60\x60\nlast  ";
   const ui = chat(t, "antigravity", raw);
   await ui.ready();
-  assert.equal(ui.primary().title, "Send Saved Multiline Draft");
-  assert.ok(ui.markdown().includes(raw));
-  assert.equal(
-    ui
-      .rows()
-      .filter((row) => row.id.startsWith("draft:"))
-      .map((row) => row.title)
-      .join(""),
-    raw.replace(/[\r\n]/g, ""),
-  );
-  ui.input().onSearchTextChange(raw.replace(/[\r\n]+/g, " "));
-  assert.equal(ui.input().searchText, raw);
-  assert.equal(ui.toasts.at(-1).title, "Multiline draft preserved");
+  assert.equal(ui.input().draft, raw);
+  const edited = raw + "\nnew line";
+  ui.input().onChange(edited);
+  assert.equal(ui.input().draft, edited);
   await ui.send();
-  assert.deepEqual(ui.prompts, [raw]);
-});
-
-test("multiline drafts require an explicit Clear Draft before replacement", async (t) => {
-  const ui = chat(t, "antigravity", "first\nsecond");
-  await ui.ready();
-  ui.input().onSearchTextChange("");
-  assert.equal(ui.input().searchText, "first\nsecond");
-  ui.clear();
-  assert.equal(ui.input().searchText, "");
-  ui.input().onSearchTextChange("replacement");
-  await ui.send();
-  assert.deepEqual(ui.prompts, ["replacement"]);
+  assert.deepEqual(ui.prompts, [edited]);
 });
 
 for (const next of ["new draft", "pending message", ""])
   test(`send acknowledgement preserves newer draft edits: ${next || "explicit clear"}`, async (t) => {
     const ui = chat(t);
     await ui.ready();
-    ui.input().onSearchTextChange("pending message");
+    ui.input().onChange("pending message");
     const gate = ui.blockSend();
     const sending = ui.send("pending message");
     await new Promise(setImmediate);
-    assert.equal(ui.input().searchText, "pending message");
-    ui.input().onSearchTextChange(next);
+    assert.equal(ui.input().draft, "pending message");
+    ui.input().onChange(next);
     gate.accept();
     await sending;
-    assert.equal(ui.input().searchText, next);
+    assert.equal(ui.input().draft, next);
   });
 
 test("failed send cannot restore input deliberately cleared while waiting", async (t) => {
   const ui = chat(t);
   await ui.ready();
-  ui.input().onSearchTextChange("pending message");
+  ui.input().onChange("pending message");
   const gate = ui.blockSend();
   const sending = ui.send("pending message");
   await new Promise(setImmediate);
-  ui.input().onSearchTextChange("");
+  ui.input().onChange("");
   gate.reject();
   await sending;
-  assert.equal(ui.input().searchText, "");
+  assert.equal(ui.input().draft, "");
 });
 
 test("unacknowledged input is persisted when the command closes", async (t) => {
   const ui = chat(t);
   await ui.ready();
-  ui.input().onSearchTextChange("keep until accepted");
+  ui.input().onChange("keep until accepted");
   const gate = ui.blockSend();
   const sending = ui.send("keep until accepted");
   await new Promise(setImmediate);
@@ -584,7 +487,7 @@ test("unacknowledged input is persisted when the command closes", async (t) => {
 test("provider switch blocks sending and another switch until old storage is durable", async (t) => {
   const ui = chat(t);
   await ui.ready();
-  ui.input().onSearchTextChange("unsent draft");
+  ui.input().onChange("unsent draft");
   const release = ui.blockWrites();
   const switching = ui.providers().onSelect("codex");
   await ui.send();
@@ -633,7 +536,7 @@ test("CLI Settings waits for the latest draft and model to be saved and locks co
   await ui.ready();
   const releaseLibrary = ui.blockWrite("library");
   const releaseModel = ui.blockWrite("model");
-  ui.input().onSearchTextChange("draft kept before settings");
+  ui.input().onChange("draft kept before settings");
   ui.models().onSelect({ model: "new-model", effort: "" });
   const pending = ui.settings();
   await new Promise(setImmediate);
@@ -666,13 +569,13 @@ for (const kind of ["library", "model"])
   test(`CLI Settings does not launch when ${kind} persistence fails and permits a successful retry`, async (t) => {
     const ui = chat(t);
     await ui.ready();
-    ui.input().onSearchTextChange("preserve after failed save");
+    ui.input().onChange("preserve after failed save");
     ui.failWrites(kind);
     if (kind === "model")
       ui.models().onSelect({ model: "new-model", effort: "" });
     await ui.settings();
     assert.deepEqual(ui.launches, []);
-    assert.equal(ui.input().searchText, "preserve after failed save");
+    assert.equal(ui.input().draft, "preserve after failed save");
     assert.equal(ui.toasts.at(-1).title, "Could Not Open CLI Settings");
     assert.equal(ui.toasts.at(-1).message, "storage refused");
     ui.failWrites();
@@ -685,7 +588,7 @@ for (const kind of ["library", "model"])
 test("CLI Settings does not launch after the conversation closes during a pending save", async (t) => {
   const ui = chat(t);
   await ui.ready();
-  ui.input().onSearchTextChange("saved on close");
+  ui.input().onChange("saved on close");
   const release = ui.blockWrites();
   const pending = ui.settings();
   ui.dispose();

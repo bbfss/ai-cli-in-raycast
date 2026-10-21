@@ -2,6 +2,7 @@ import { setLanguage, t } from "./i18n";
 import {
   createProviderClient,
   providerCapabilities,
+  providerIcon,
   isProviderId,
   type ProviderId,
   type ChatClient,
@@ -31,11 +32,8 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type CodexEvent, type CodexModel, type ModelSelection } from "./codex";
 import { useSessionHistory, type Page } from "./history";
-import {
-  conversationMarkdown,
-  conversationGroups,
-  splitChatLines,
-} from "./chat-text";
+import { conversationMarkdown } from "./chat-text";
+import { MessageComposer } from "./message-composer";
 import { ModelMenu, EffortMenu } from "./model-menu";
 import {
   asRecord,
@@ -223,9 +221,6 @@ function NativeChat(
   }
   const [error, setError] = useState("");
   const [page, setPage] = useState<Page>("chat");
-  const [selectedChatRowId, setSelectedChatRowId] = useState<string | null>(
-    null,
-  );
   const [sessions, setSessions] = useState<StoredConversation[]>([]);
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [switching, setSwitching] = useState(false);
@@ -261,7 +256,6 @@ function NativeChat(
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const draftRef = useRef(draft);
   const draftEditRevision = useRef(0);
-  const multilineNoticeRef = useRef(false);
   draftRef.current = draft;
   // Keep the latest snapshot synchronously, including just-typed text on exit.
   if (conversation.threadId)
@@ -283,28 +277,11 @@ function NativeChat(
 
   function editDraft(text: string) {
     if (switching) return;
-    // List's native search field is single-line. Preserve an older/pasted raw
-    // multiline draft if the host normalizes it, rather than sending truncated
-    // content. It is displayed in full in the detail and has an explicit clear.
-    if (/[\r\n]/.test(draftRef.current) && text !== draftRef.current) {
-      if (!multilineNoticeRef.current) {
-        multilineNoticeRef.current = true;
-        void showToast({
-          style: Toast.Style.Failure,
-          title: t("Multiline draft preserved"),
-          message: t(
-            "Send the complete draft or clear it before typing a replacement.",
-          ),
-        });
-      }
-      return;
-    }
     draftEditRevision.current += 1;
     setDraftValue(text);
   }
 
   function clearDraft() {
-    multilineNoticeRef.current = false;
     draftEditRevision.current += 1;
     setDraftValue("");
   }
@@ -1083,78 +1060,10 @@ function NativeChat(
         statusVisible ? status : "",
         error,
         capabilities.label,
+        providerIcon(props.provider),
       ),
     [visibleMessages, ready, error, status, statusVisible, capabilities.label],
   );
-  const multilineDraft = /[\r\n]/.test(draft);
-  const messageSections = useMemo(
-    () =>
-      conversationGroups(visibleMessages)
-        .flat()
-        .map((message) => ({
-          message,
-          lines: splitChatLines(message.content || t("Thinking…")),
-        })),
-    [visibleMessages, preferences.uiLanguage],
-  );
-  const statusLines = useMemo(
-    () =>
-      error || statusVisible || (busy && !capabilities.supportsSteering)
-        ? splitChatLines(
-            error ||
-              (busy && !capabilities.supportsSteering
-                ? t("Keep drafting · Wait or stop, then send")
-                : status),
-          )
-        : [],
-    [
-      error,
-      statusVisible,
-      status,
-      busy,
-      capabilities.supportsSteering,
-      preferences.uiLanguage,
-    ],
-  );
-  const multilineDraftLines = useMemo(
-    () => (multilineDraft ? splitChatLines(draft) : []),
-    [draft, multilineDraft],
-  );
-  const multilineNoteLines = useMemo(
-    () =>
-      multilineDraft
-        ? splitChatLines(
-            t(
-              "All lines are preserved. Enter sends this complete draft; Clear Draft discards it.",
-            ),
-          )
-        : [],
-    [multilineDraft, preferences.uiLanguage],
-  );
-  const chatRowIds = useMemo(
-    () => [
-      ...statusLines.map((_, index) => `status:${index}`),
-      ...multilineNoteLines.map((_, index) => `draft-note:${index}`),
-      ...multilineDraftLines.map((_, index) => `draft:${index}`),
-      ...messageSections.flatMap(({ message, lines }) =>
-        lines.map((_, index) => `${message.id}:${index}`),
-      ),
-    ],
-    [statusLines, multilineNoteLines, multilineDraftLines, messageSections],
-  );
-  const chatRowIdSet = useMemo(() => new Set(chatRowIds), [chatRowIds]);
-  const activeChatRowId =
-    selectedChatRowId && chatRowIdSet.has(selectedChatRowId)
-      ? selectedChatRowId
-      : chatRowIds[0] || null;
-  // A fence longer than every run in the draft keeps Markdown-looking prompts
-  // visible as literal text. The sent value remains the original raw draft.
-  const draftFence = "`".repeat(
-    Math.max(2, ...(draft.match(/`+/g) || []).map((run) => run.length)) + 1,
-  );
-  const displayMarkdown = multilineDraft
-    ? `**${t("Saved multiline draft")}**\n\n${t("All lines are preserved. Enter sends this complete draft; Clear Draft discards it.")}\n\n${draftFence}text\n${draft}\n${draftFence}\n\n---\n\n${chatMarkdown}`
-    : chatMarkdown;
   const historyProps = useSessionHistory({
     page,
     sessions,
@@ -1219,167 +1128,50 @@ function NativeChat(
       />
     </ActionPanel.Section>
   );
-  const sendAction = (
-    <Action
-      title={
-        busy && !capabilities.supportsSteering
-          ? t("Wait for Response")
-          : multilineDraft
-            ? t("Send Saved Multiline Draft")
-            : busy && capabilities.supportsSteering
-              ? t("Send Instructions")
-              : t("Send Message")
-      }
-      icon={Icon.ArrowRight}
-      onAction={async () => {
-        await sendPrompt(draftRef.current);
-      }}
-    />
-  );
-  const minimalChatActions = <ActionPanel>{sendAction}</ActionPanel>;
-  const fullChatActions = (
-    <ActionPanel
-      title={[
-        (modelSelection?.model || currentModel.model) === "__cli_default__"
-          ? t("CLI Default")
-          : modelSelection?.model || currentModel.model,
-        modelSelection?.effort ?? currentModel.effort,
-      ]
-        .filter(Boolean)
-        .join(" · ")}
-    >
-      {sendAction}
-      {!ready && error && (
-        <Action
-          title={t("Reconnect")}
-          icon={Icon.ArrowClockwise}
-          onAction={reconnect}
-        />
-      )}
-      {stopResponseAction}
-      <Action.Push
-        title={t("View Full Conversation")}
-        icon={Icon.Document}
-        target={
-          <Detail
-            navigationTitle={`${capabilities.label} in Raycast`}
-            markdown={displayMarkdown}
-            actions={
-              <ActionPanel>
-                <Action.CopyToClipboard
-                  title={t("Copy Current Conversation")}
-                  content={transcript(
-                    conversation.messages,
-                    capabilities.label,
-                  )}
-                />
-                {stopResponseAction}
-              </ActionPanel>
-            }
-          />
-        }
-      />
-      {draft && (
-        <Action
-          title={t("Clear Draft")}
-          icon={Icon.Eraser}
-          onAction={clearDraft}
-        />
-      )}
-      {conversationControls()}
-      <ActionPanel.Section>{secondaryActions}</ActionPanel.Section>
-    </ActionPanel>
-  );
-  // Only the selected row owns the full model/provider menu and Markdown
-  // target. Repeating that tree for every text line exhausts Raycast's heap.
-  const rowActions = (id: string) =>
-    id === activeChatRowId ? fullChatActions : minimalChatActions;
   if (page === "chat") {
     return (
-      <List
+      <Detail
         navigationTitle={`${capabilities.label} in Raycast`}
-        filtering={false}
-        throttle={false}
-        searchText={draft}
-        onSearchTextChange={editDraft}
-        searchBarPlaceholder={t("Write a message, then press Enter…")}
-        isShowingDetail={false}
-        selectedItemId={activeChatRowId || undefined}
-        onSelectionChange={setSelectedChatRowId}
+        markdown={chatMarkdown}
         isLoading={(!ready && !error) || busy || switching}
-        actions={chatRowIds.length ? undefined : fullChatActions}
-      >
-        <List.EmptyView
-          title={t("What would you like to work on?")}
-          description={t("Type your message above, then press Enter to send.")}
-          icon={Icon.Message}
-        />
-        {statusLines.length > 0 && (
-          <List.Section
-            title={error ? t("Connection Notice") : capabilities.label}
+        actions={
+          <ActionPanel
+            title={[
+              modelSelection?.model || currentModel.model,
+              modelSelection?.effort ?? currentModel.effort,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           >
-            {statusLines.map((line, index) => (
-              <List.Item
-                key={`status:${index}`}
-                id={`status:${index}`}
-                title={line || " "}
-                icon={Icon.Info}
-                actions={rowActions(`status:${index}`)}
+            <MessageComposer
+              draft={draft}
+              busy={busy}
+              canSteer={capabilities.supportsSteering}
+              ready={ready}
+              onChange={editDraft}
+              onSend={sendPrompt}
+              onStop={stopResponse}
+            />
+            {!ready && error && (
+              <Action
+                title={t("Reconnect")}
+                icon={Icon.ArrowClockwise}
+                onAction={reconnect}
               />
-            ))}
-          </List.Section>
-        )}
-        {multilineDraft && (
-          <List.Section title={t("Saved multiline draft")}>
-            {multilineNoteLines.map((line, index) => (
-              <List.Item
-                key={`draft-note:${index}`}
-                id={`draft-note:${index}`}
-                title={line || " "}
-                icon={Icon.Info}
-                actions={rowActions(`draft-note:${index}`)}
+            )}
+            {stopResponseAction}
+            {draft && (
+              <Action
+                title={t("Clear Draft")}
+                icon={Icon.Eraser}
+                onAction={clearDraft}
               />
-            ))}
-            {multilineDraftLines.map((line, index) => (
-              <List.Item
-                key={`draft:${index}`}
-                id={`draft:${index}`}
-                title={line || " "}
-                icon={index === 0 ? Icon.Pencil : undefined}
-                actions={rowActions(`draft:${index}`)}
-              />
-            ))}
-          </List.Section>
-        )}
-        {messageSections.map(({ message, lines }) => (
-          <List.Section
-            key={message.id}
-            title={
-              message.role === "assistant"
-                ? capabilities.label
-                : message.kind === "steer"
-                  ? t("Additional Instructions")
-                  : t("You")
-            }
-          >
-            {lines.map((line, index) => (
-              <List.Item
-                key={`${message.id}:${index}`}
-                id={`${message.id}:${index}`}
-                title={line || " "}
-                icon={
-                  index === 0
-                    ? message.role === "assistant"
-                      ? Icon.Stars
-                      : Icon.Person
-                    : undefined
-                }
-                actions={rowActions(`${message.id}:${index}`)}
-              />
-            ))}
-          </List.Section>
-        ))}
-      </List>
+            )}
+            {conversationControls()}
+            <ActionPanel.Section>{secondaryActions}</ActionPanel.Section>
+          </ActionPanel>
+        }
+      />
     );
   }
   return (

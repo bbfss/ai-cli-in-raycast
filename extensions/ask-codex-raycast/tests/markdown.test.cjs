@@ -77,3 +77,25 @@ test("the conversation renderer preserves Markdown with questions before answers
   assert.ok(!output.includes("```text"));
   assert.equal(messages[0].content, "第一行\n第二行");
 });
+
+test("multiple exchanges preserve full code, tables, math and Unicode without list-row conversion", () => {
+  const code = "```ts\nconst family = '👨‍👩‍👧‍👦';\n    return '$literal$';\n```";
+  const table = "| Name | Value |\n| --- | --- |\n| Test | 42 |";
+  const output = conversationMarkdown(
+    [
+      { id: "u1", role: "user", content: "Earlier question" },
+      { id: "a1", role: "assistant", content: code },
+      { id: "u2", role: "user", content: "Latest question" },
+      { id: "a2", role: "assistant", content: table + "\n\n$$\nx^2 + y^2\n$$" },
+    ],
+    "/assets",
+    "",
+    "",
+  );
+  assert.ok(output.includes(code));
+  assert.ok(output.includes(table));
+  assert.ok(output.includes("$$\nx^2 + y^2\n$$"));
+  assert.ok(output.indexOf("Latest question") < output.indexOf(table));
+  assert.ok(output.indexOf(table) < output.indexOf("Earlier question"));
+  assert.ok(output.indexOf("Earlier question") < output.indexOf(code));
+});

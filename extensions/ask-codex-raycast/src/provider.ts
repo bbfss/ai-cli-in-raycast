@@ -18,6 +18,19 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
   workbuddy: "WorkBuddy",
   gemini: "Gemini",
 };
+export const PROVIDER_ICONS: Readonly<Record<ProviderId, string>> = {
+  codex: "provider-codex.png",
+  antigravity: "provider-antigravity.png",
+  qoder: "provider-qoder.png",
+  "qoder-cn": "provider-qoder.png",
+  workbuddy: "provider-workbuddy.png",
+  gemini: "provider-gemini.png",
+};
+export function providerIcon(provider: string): string {
+  return Object.hasOwn(PROVIDER_ICONS, provider)
+    ? PROVIDER_ICONS[provider as ProviderId]
+    : "chat-icon.png";
+}
 export function isProviderId(value: unknown): value is ProviderId {
   return typeof value === "string" && Object.hasOwn(PROVIDER_LABELS, value);
 }

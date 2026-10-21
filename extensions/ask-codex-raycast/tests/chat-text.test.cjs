@@ -1,44 +1,13 @@
 require("./load.cjs");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const {
   conversationMarkdown,
-  splitChatLines,
   conversationGroups,
 } = require("../src/chat-text.ts");
 
-test("list lines preserve all text and split near words without cutting Unicode graphemes", () => {
-  const chinese = "汉".repeat(121);
-  assert.deepEqual(
-    splitChatLines(chinese).map((line) => [...line].length),
-    [48, 48, 25],
-  );
-  assert.equal(splitChatLines(chinese).join(""), chinese);
-  const text = "one two three four five six seven";
-  const wrapped = splitChatLines(text, 12);
-  assert.equal(wrapped.join(""), text);
-  assert.ok(wrapped.slice(0, -1).every((line) => / $/.test(line)));
-  const cluster = "👨‍👩‍👧‍👦e\u0301";
-  const unicode = cluster.repeat(150);
-  const lines = splitChatLines(unicode, 10);
-  assert.equal(lines.join(""), unicode);
-  const segmented = lines.flatMap((line) =>
-    [
-      ...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(
-        line,
-      ),
-    ].map((part) => part.segment),
-  );
-  assert.ok(segmented.every((part) => part === "👨‍👩‍👧‍👦" || part === "e\u0301"));
-  assert.deepEqual(splitChatLines("first\r\n\nlast\n"), [
-    "first",
-    "",
-    "last",
-    "",
-  ]);
-});
-
-test("list groups retain all history and within-exchange steering order without mutation", () => {
+test("conversation groups retain all history and within-exchange steering order without mutation", () => {
   const messages = [
     { id: "1", role: "user", content: "first" },
     { id: "2", role: "assistant", content: "first answer" },
@@ -76,6 +45,20 @@ test("latest exchange comes first while every question stays before its answer",
   assert.equal(output.split("\n\n---\n\n").length, 2);
   assert.ok(!output.includes("!["));
   assert.equal(JSON.stringify(messages), before);
+});
+
+test("an explicit provider logo uses a local URL without altering message content", () => {
+  const output = conversationMarkdown(
+    [{ id: "a", role: "assistant", content: "**Original answer**" }],
+    path.resolve("/provider icons"),
+    "",
+    "",
+    "Gemini",
+    "gemini.svg",
+  );
+  assert.match(output, /!\[Gemini\]\(<file:\/\//);
+  assert.match(output, /provider%20icons\/gemini\.svg\?raycast-width=18/);
+  assert.match(output, /\*\*Original answer\*\*/);
 });
 
 test("steering and multiple assistant items retain their order within one exchange", () => {
@@ -149,11 +132,11 @@ test("streaming reply retains a thinking placeholder", () => {
   assert.match(output, /Thinking…/);
 });
 
-test("empty conversation directs typing to the persistent input", () => {
+test("empty conversation explains the floating input action", () => {
   const output = conversationMarkdown([], "/assets", "", "");
   assert.match(output, /What would you like to work on/);
-  assert.match(output, /Type your message above, then press Enter to send/);
-  assert.doesNotMatch(output, /open|composer|Shift/);
+  assert.match(output, /Press Enter to write a message/);
+  assert.doesNotMatch(output, /Type your message above/);
 });
 
 test("connection errors take precedence over stale status", () => {

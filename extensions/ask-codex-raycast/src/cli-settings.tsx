@@ -129,7 +129,7 @@ export default function CliSettings() {
               key={entry.id}
               id={entry.id}
               title={entry.label}
-              icon={Icon.Terminal}
+              icon={`provider-${entry.id === "qoder-cn" ? "qoder" : entry.id}.png`}
               accessories={[
                 {
                   tag: {

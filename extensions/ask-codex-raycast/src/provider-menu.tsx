@@ -31,7 +31,11 @@ export function ProviderMenu({
           ? t("Provider: {provider}", { provider: current.title })
           : t("Choose Provider")
       }
-      icon={Icon.Terminal}
+      icon={
+        current
+          ? `provider-${current.id === "qoder-cn" ? "qoder" : current.id}.png`
+          : Icon.Terminal
+      }
       shortcut={
         shortcuts
           ? {
@@ -46,7 +50,7 @@ export function ProviderMenu({
           <Action
             key={provider.id}
             title={provider.title}
-            icon={provider.id === selected ? Icon.Checkmark : Icon.Terminal}
+            icon={`provider-${provider.id === "qoder-cn" ? "qoder" : provider.id}.png`}
             autoFocus={provider.id === selected}
             onAction={() => {
               // Re-selecting the active CLI must not reset its conversation.

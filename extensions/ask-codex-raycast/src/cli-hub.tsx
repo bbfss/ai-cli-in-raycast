@@ -115,7 +115,7 @@ export default function CliHub() {
             key={entry.id}
             id={entry.id}
             title={`${entry.label} in Raycast`}
-            icon="chat-icon.png"
+            icon={`provider-${entry.id === "qoder-cn" ? "qoder" : entry.id}.png`}
             keywords={[entry.id, "cli", entry.label]}
             accessories={[
               {

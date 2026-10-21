@@ -39,7 +39,7 @@ test("localized renderer translates interface copy while preserving conversation
   setLanguage("zh-TW");
   const empty = conversationMarkdown([], "/assets", "", "", "Qoder CN");
   assert.match(empty, /想聊點什麼/);
-  assert.match(empty, /在上方輸入訊息，按 Enter 傳送/);
+  assert.match(empty, /按 Enter 開始輸入/);
   assert.doesNotMatch(empty, /\| --- \|/);
   const messages = [
     { id: "user", role: "user", content: "CLI Settings" },

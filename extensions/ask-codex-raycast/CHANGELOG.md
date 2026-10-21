@@ -1,21 +1,18 @@
 # AI CLI in Raycast
 
-## [Full-width Conversation List] - 2026-10-21
+## [Full-width Markdown and Floating Input] - 2026-10-21
 
-- Keep questions, streaming replies and previous exchanges directly below the persistent input; remove the provider sidebar.
-- Preserve Enter sending and offer full Markdown reading as an optional action.
-
-## [Same-page Input and Minimal Logo] - 2026-10-21
-
-- Keep a native single-line input and Markdown conversation on the same List/detail page; Enter sends without opening another editor.
-- Keep drafts until acknowledgement and protect newer edits from late callbacks. Preserve and show old multiline drafts intact; require an explicit Clear Draft before replacing them.
-- Put the latest question-and-answer group first, with the question above the answer, without avatars. Make Stop Response an explicit action; Enter never stops. Separate steering from drafting and do not automatically queue sends.
-- Adopt Gemini's two-shape black-and-white speech bubble as `chat-icon.svg` and its unchanged Resvg-rendered PNG across the manifest and launcher.
-- Pass build, TypeScript, lint and 159 tests; verify Windows Enter sending/reply on the same page and Stop Response through Actions. Further native draft checks remain pending. Keep withdrawn Store applications closed.
+- Restore full-width native Detail conversations with Markdown code blocks, lists and formulas; remove the flattened List-row chat prototype.
+- Open a bottom-right native ActionPanel.Submenu input with Enter and send with Enter, while keeping the conversation visible without editor-page navigation.
+- Preserve drafts with revision, pending-send and mounted guards. Offer an explicit Send Saved Draft with preview, Copy Draft to Continue Editing and Clear Draft. Do not send hidden saved text under the ordinary empty-input action.
+- Keep the latest question-and-answer group first, with each question above its answer. Keep Stop Response separate from sending; only supported CLIs accept instructions during a reply. Do not automatically queue drafts.
+- Vertically align the inline provider logo with its name using an 18px Markdown image inside `<sub>`; native Windows center measurements improved from a 9px difference to 0.5px.
+- Document the native uncontrolled search-input boundary: no programmatic draft refill or promised persistent multiline/Shift+Enter editing. Maintain asset provenance separately in BRANDING.md.
+- Pass build, TypeScript, lint and 172 tests. Verify native Windows Markdown body/code blocks, provider logos, the floating input and the user's successful message/reply. This round did not retest every provider backend or independently validate macOS. Keep withdrawn Store applications closed.
 
 ## [CLI Launcher, Settings and Localization] - 2026-10-21
 
-Earlier development state; its floating composer and suite icon are superseded above.
+Earlier development state; current input behavior and asset documentation are described above.
 
 - Rename the suite AI CLI in Raycast and add a native launcher and CLI Settings, for eight independently enabled commands including the six CLI chats.
 - Add English, simplified Chinese and traditional Chinese interface preferences; retain English static Raycast metadata and preserve original conversation content and CLI diagnostics.
