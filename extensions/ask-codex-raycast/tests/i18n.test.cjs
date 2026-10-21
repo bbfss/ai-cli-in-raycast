@@ -1,6 +1,8 @@
 require("./load.cjs");
 const { test, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
+const childProcess = require("node:child_process");
+const os = require("node:os");
 const { setLanguage, uiLanguage, t } = require("../src/i18n.ts");
 const { conversationMarkdown } = require("../src/chat-text.ts");
 const {
@@ -11,7 +13,8 @@ const {
 
 afterEach(() => setLanguage("en"));
 
-function systemLocale(context, initial) {
+function systemLocale(context, initial, host = "win32") {
+  context.mock.method(os, "platform", () => host);
   let locale = initial;
   const original = Intl.DateTimeFormat.prototype.resolvedOptions;
   context.mock.method(
@@ -25,6 +28,90 @@ function systemLocale(context, initial) {
     locale = value;
   };
 }
+
+function macLanguage(context, read, locale = "en-US") {
+  systemLocale(context, locale, "darwin");
+  const calls = [];
+  context.mock.method(childProcess, "execFileSync", (command, args) => {
+    calls.push([command, args]);
+    return read(args[1]);
+  });
+  const filename = require.resolve("../src/i18n.ts");
+  const saved = require.cache[filename];
+  delete require.cache[filename];
+  const actual = require(filename);
+  context.after(() => {
+    require.cache[filename] = saved;
+  });
+  return { ...actual, calls };
+}
+
+test("macOS follows the Raycast app language before the global language and formatting locale", (context) => {
+  const mac = macLanguage(context, () => '(\n    "zh-Hant-HK"\n)');
+  for (const value of ["system", undefined, null, "system"]) {
+    assert.equal(mac.setLanguage(value), "zh-TW");
+    assert.equal(mac.t("CLI Settings"), "CLI 設定");
+  }
+  assert.deepEqual(mac.calls, [
+    ["/usr/bin/defaults", ["read", "com.raycast.macos", "AppleLanguages"]],
+  ]);
+});
+
+test("macOS uses the first global preferred language when there is no Raycast override and reads it only once", (context) => {
+  const mac = macLanguage(context, (domain) => {
+    if (domain === "com.raycast.macos") throw new Error("No app override");
+    return '(\n    "zh-Hans-US",\n    en\n)';
+  });
+  assert.equal(mac.setLanguage("system"), "zh-CN");
+  assert.equal(mac.t("CLI Settings"), "CLI 设置");
+  assert.equal(mac.setLanguage("en"), "en");
+  assert.equal(mac.setLanguage("system"), "zh-CN");
+  assert.deepEqual(mac.calls, [
+    ["/usr/bin/defaults", ["read", "com.raycast.macos", "AppleLanguages"]],
+    ["/usr/bin/defaults", ["read", "-g", "AppleLanguages"]],
+  ]);
+});
+
+test("macOS manual language choices do not read application or system preferences", (context) => {
+  const mac = macLanguage(context, () => {
+    throw new Error("Unexpected preferences read");
+  });
+  for (const value of ["en", "zh-CN", "zh-TW"]) {
+    assert.equal(mac.setLanguage(value), value);
+  }
+  assert.deepEqual(mac.calls, []);
+});
+
+test("macOS falls back to Intl when app preferences are absent and the global list is empty", (context) => {
+  const mac = macLanguage(
+    context,
+    (domain) => {
+      if (domain === "com.raycast.macos") throw new Error("No app override");
+      return "(\n)";
+    },
+    "zh-TW",
+  );
+  assert.equal(mac.setLanguage("system"), "zh-TW");
+  assert.equal(mac.setLanguage("system"), "zh-TW");
+  assert.equal(mac.calls.length, 2);
+});
+
+test("an unsupported macOS app language uses English without replacing it with a global Chinese preference", (context) => {
+  const mac = macLanguage(context, (domain) =>
+    domain === "com.raycast.macos" ? "(fr)" : '("zh-Hans")',
+  );
+  assert.equal(mac.setLanguage("system"), "en");
+  assert.equal(mac.calls.length, 1);
+});
+
+test("Windows uses Intl without starting macOS preference commands", (context) => {
+  systemLocale(context, "zh-CN");
+  const read = context.mock.method(childProcess, "execFileSync", () => {
+    throw new Error("Unexpected macOS command");
+  });
+  assert.equal(setLanguage("system"), "zh-CN");
+  assert.equal(read.mock.callCount(), 0);
+});
 
 test("language selection accepts explicit supported values and invalid nonempty settings fall back to English", (context) => {
   systemLocale(context, "zh-CN");

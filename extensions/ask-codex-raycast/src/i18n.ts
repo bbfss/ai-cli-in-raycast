@@ -1,19 +1,55 @@
+import { execFileSync } from "node:child_process";
+import { platform } from "node:os";
+
 export type UILanguage = "en" | "zh-CN" | "zh-TW";
 
 let language: UILanguage = "en";
+let macSystemLanguage: UILanguage | undefined;
+
+function languageForLocale(value: string): UILanguage {
+  const locale = new Intl.Locale(value);
+  return locale.language === "zh"
+    ? locale.maximize().script === "Hant"
+      ? "zh-TW"
+      : "zh-CN"
+    : "en";
+}
+
+function systemLanguage(): UILanguage {
+  if (platform() === "darwin") {
+    if (macSystemLanguage) return macSystemLanguage;
+    for (const domain of ["com.raycast.macos", "-g"]) {
+      try {
+        const languages = execFileSync(
+          "/usr/bin/defaults",
+          ["read", domain, "AppleLanguages"],
+          {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+            timeout: 1000,
+          },
+        );
+        const preferred = languages.match(
+          /^\s*\(\s*"?([a-zA-Z]{2,8}(?:-[a-zA-Z0-9]{1,8})*)"?\s*[,)]/,
+        );
+        if (preferred)
+          return (macSystemLanguage = languageForLocale(preferred[1]));
+      } catch {
+        // An absent app override falls through to the global language list.
+      }
+    }
+    macSystemLanguage = languageForLocale(
+      Intl.DateTimeFormat().resolvedOptions().locale,
+    );
+    return macSystemLanguage;
+  }
+  return languageForLocale(Intl.DateTimeFormat().resolvedOptions().locale);
+}
 
 /** Controls runtime UI; Raycast's host preference text is statically bilingual. */
 export function setLanguage(value: unknown): UILanguage {
   if (value === "system" || value == null) {
-    const locale = new Intl.Locale(
-      Intl.DateTimeFormat().resolvedOptions().locale,
-    );
-    language =
-      locale.language === "zh"
-        ? locale.maximize().script === "Hant"
-          ? "zh-TW"
-          : "zh-CN"
-        : "en";
+    language = systemLanguage();
   } else {
     language = value === "zh-CN" || value === "zh-TW" ? value : "en";
   }

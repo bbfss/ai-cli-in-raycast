@@ -1,5 +1,11 @@
 # AI CLI in Raycast
 
+## [macOS Preferred Languages] - 2026-10-21
+
+- Resolve Follow System from Raycast's macOS application language, then the Mac's preferred language, with Intl fallback. Preserve manual overrides and Windows behavior.
+- Cache macOS preference reads for the command process; quit and reopen Raycast after changing macOS language settings.
+- Cover macOS app/global priority, cache behavior, manual overrides and Windows isolation in production-resolver tests. Native macOS acceptance remains pending.
+
 ## [System Interface Language] - 2026-10-21
 
 - Default chats, the launcher and CLI Settings to Follow System, with simplified/traditional Chinese script detection and English fallback.
