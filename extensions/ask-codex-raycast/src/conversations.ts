@@ -1,3 +1,5 @@
+import { t } from "./i18n";
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -123,7 +125,9 @@ export function parseLibrary(
     const data = asRecord(JSON.parse(value));
     if (data.version !== 2 || !Array.isArray(data.sessions))
       throw new Error(
-        "Unrecognized conversation format. Original records have been preserved; please do not clear extension data.",
+        t(
+          "Unrecognized conversation format. Original records have been preserved; please do not clear extension data.",
+        ),
       );
     return {
       version: 2,
@@ -170,7 +174,7 @@ export function conversationTitle(session: StoredConversation): string {
       .find((item) => item.role === "user")
       ?.content.replace(/\s+/g, " ")
       .slice(0, 70) ||
-    "New Chat"
+    t("New Chat")
   );
 }
 

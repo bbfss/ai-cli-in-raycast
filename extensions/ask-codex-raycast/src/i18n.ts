@@ -2,7 +2,7 @@ export type UILanguage = "en" | "zh-CN" | "zh-TW";
 
 let language: UILanguage = "en";
 
-/** Raycast's command metadata stays static; only extension-owned UI is translated. */
+/** Controls runtime UI; Raycast's host preference text is statically bilingual. */
 export function setLanguage(value: unknown): UILanguage {
   language = value === "zh-CN" || value === "zh-TW" ? value : "en";
   return language;
@@ -15,6 +15,16 @@ export function uiLanguage(): UILanguage {
 // Keep the two Chinese variants explicit: automatic character conversion can
 // change product names or technical meanings. Unknown text always stays intact.
 const translations: Record<string, readonly [string, string]> = {
+  "Automatic CLI detection is off. Set the {provider} CLI path in preferences.":
+    [
+      "自动检测已关闭，请在偏好设置中填写 {provider} CLI 的路径。",
+      "自動偵測已關閉，請在偏好設定中填寫 {provider} CLI 的路徑。",
+    ],
+  "Unrecognized conversation format. Original records have been preserved; please do not clear extension data.":
+    [
+      "无法识别对话记录格式。原始记录已保留，请勿清除扩展数据。",
+      "無法辨識對話記錄格式。原始記錄已保留，請勿清除擴充功能資料。",
+    ],
   "Send Saved Draft: {preview}": ["发送草稿：{preview}", "傳送草稿：{preview}"],
   "Change Default Strategy": ["修改默认策略", "修改預設策略"],
   "Default strategy changed. Reopen these settings.": [

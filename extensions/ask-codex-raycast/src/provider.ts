@@ -1,4 +1,5 @@
 import { LocalStorage } from "@raycast/api";
+import { t } from "./i18n";
 import {
   CodexAppServer,
   type CodexEvent,
@@ -83,7 +84,10 @@ export function createProviderClient(
     if (options.autoDetectCli === false && !explicit?.trim())
       client.connect = async () => {
         throw new Error(
-          `Automatic CLI detection is off. Set the ${PROVIDER_LABELS[provider]} CLI path in preferences.`,
+          t(
+            "Automatic CLI detection is off. Set the {provider} CLI path in preferences.",
+            { provider: PROVIDER_LABELS[provider] },
+          ),
         );
       };
     return client;

@@ -9,6 +9,7 @@ const ts = require("typescript");
 const { CLI_DEFINITIONS } = require("../src/cli-detection.ts");
 const { connectionSignature, parseSetup } = require("../src/setup-state.ts");
 const { storageKeys } = require("../src/session-storage.ts");
+const { setLanguage } = require("../src/i18n.ts");
 
 // Only Raycast's native host is replaced. Factory and all three production
 // client implementations execute as shipped; resolver/OS spies stop I/O.
@@ -130,6 +131,35 @@ test("automatic discovery remains enabled by default and when explicitly selecte
     ["qoder", undefined],
     ["qoder", undefined],
   ]);
+  assert.deepEqual(calls.launches, []);
+});
+
+test("disabled-detection guidance follows the UI language while actual resolver diagnostics remain untouched", async (t) => {
+  const calls = spies(t);
+  t.after(() => setLanguage("en"));
+  for (const language of ["zh-CN", "zh-TW"]) {
+    setLanguage(language);
+    for (const entry of CLI_DEFINITIONS) {
+      const client = createProviderClient(entry.id, {
+        ...options,
+        autoDetectCli: false,
+      });
+      const expected =
+        language === "zh-CN"
+          ? `自动检测已关闭，请在偏好设置中填写 ${entry.label} CLI 的路径。`
+          : `自動偵測已關閉，請在偏好設定中填寫 ${entry.label} CLI 的路徑。`;
+      await assert.rejects(client.connect(), { message: expected });
+      client.close();
+    }
+    const client = createProviderClient("qoder", { ...options });
+    await assert.rejects(client.connect(), { message: "resolver reached" });
+    client.close();
+  }
+  assert.deepEqual(calls.resolvers, [
+    ["qoder", undefined],
+    ["qoder", undefined],
+  ]);
+  assert.deepEqual(calls.files, []);
   assert.deepEqual(calls.launches, []);
 });
 

@@ -1,5 +1,12 @@
 # AI CLI in Raycast
 
+## [Chinese Preference Descriptions] - 2026-10-21
+
+- Replace English-only native preference descriptions and controls with Chinese-first bilingual text, including all six default strategies, detection, Codex permissions, and CLI paths. Add bilingual extension/command descriptions and prompt placeholders.
+- Clarify the language setting: runtime extension screens follow the chosen language after reopening; the native host preference page keeps static bilingual text.
+- Localize generated missing-path and conversation-format errors and empty history titles in simplified/traditional Chinese, preserving user text and raw CLI diagnostics.
+- Pass 293 tests, build, TypeScript and lint. Read back all 17 native preference titles and check Chinese descriptions and translated dropdown options without changing saved values or sending inference.
+
 ## [Continue Input and Speaker Avatars] - 2026-10-21
 
 - Keep message entry open and focused after choosing a model or effort, sharing the original draft and send guards through lazy native submenu branches.
