@@ -8,16 +8,21 @@ export function conversationMarkdown(
   assetsPath: string,
   status: string,
   error: string,
+  assistant = "Codex",
 ) {
   const cards = [...messages].reverse().map((message) => {
     const speaker =
       message.role === "assistant"
-        ? "Codex"
+        ? assistant
         : message.kind === "steer"
           ? "You · Additional Instructions"
           : "You";
     const avatar =
-      message.role === "assistant" ? "command-icon.png" : "user-avatar.svg";
+      message.role === "assistant"
+        ? assistant === "Codex"
+          ? "command-icon.png"
+          : "cli-avatar.svg"
+        : "user-avatar.svg";
     const avatarURL = pathToFileURL(join(assetsPath, avatar));
     avatarURL.search = "raycast-width=22&raycast-height=22";
     const body = renderMarkdown(message.content) || "Thinking…";
@@ -30,6 +35,6 @@ export function conversationMarkdown(
   return (
     header +
     (cards.join("\n\n---\n\n") ||
-      "**Codex in Raycast**\n\nPress Enter to open the message composer, enter your message, and press Enter to send. Replies and follow-ups will stay in the same conversation.")
+      "**AI in Raycast**\n\nPress Enter to open the message composer, enter your message, and press Enter to send. Replies and follow-ups will stay in the same conversation.")
   );
 }

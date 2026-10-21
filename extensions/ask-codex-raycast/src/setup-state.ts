@@ -3,6 +3,7 @@ import type { CodexModel, ModelSelection } from "./codex";
 export const SETUP_KEY = "codex-in-raycast.setup.v1";
 export type ConnectionPreferences = {
   codexPath?: string;
+  agyPath?: string;
   workingDirectory?: string;
   sandboxMode?: string;
   liveSearch?: boolean;
@@ -16,7 +17,15 @@ export type Setup = {
 
 export function connectionSignature(
   preferences: ConnectionPreferences,
+  provider = "codex",
 ): string {
+  if (provider !== "codex")
+    return JSON.stringify([
+      provider,
+      preferences.agyPath?.trim() || "",
+      preferences.workingDirectory?.trim() || "",
+      preferences.sandboxMode || "read-only",
+    ]);
   return JSON.stringify([
     preferences.codexPath?.trim() || "",
     preferences.workingDirectory?.trim() || "",

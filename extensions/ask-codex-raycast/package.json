@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "ask-codex-raycast",
-  "title": "Codex in Raycast",
-  "description": "Keep a conversation with your signed-in local Codex CLI directly inside Raycast, with streaming Markdown, follow-ups, steering, and model selection.",
+  "title": "AI in Raycast",
+  "description": "Continue conversations with installed local AI CLIs inside Raycast, with isolated sessions and native model controls.",
   "icon": "command-icon.png",
   "author": "bbfss",
   "license": "MIT",
@@ -17,15 +17,18 @@
   "commands": [
     {
       "name": "index",
-      "title": "Codex in Raycast",
+      "title": "AI in Raycast",
       "subtitle": "Chat with Local CLI",
-      "description": "Continue chatting with your local Codex CLI without leaving Raycast.",
+      "description": "Continue conversations with installed local AI CLIs inside Raycast, with isolated sessions and native model controls.",
       "mode": "view",
       "keywords": [
         "chat",
         "ai",
         "terminal",
-        "codex"
+        "codex",
+        "antigravity",
+        "agy",
+        "gemini"
       ],
       "arguments": [
         {
@@ -42,8 +45,8 @@
     {
       "name": "liveSearch",
       "type": "checkbox",
-      "title": "Web Search",
-      "description": "Allow Codex to search the live web for current information.",
+      "title": "Codex Web Search",
+      "description": "Allow Codex CLI to use live web search. Other CLIs use their own settings.",
       "label": "Enable live web search",
       "required": false,
       "default": true
@@ -51,8 +54,8 @@
     {
       "name": "sandboxMode",
       "type": "dropdown",
-      "title": "Sandbox Mode",
-      "description": "Controls what Codex may do while answering.",
+      "title": "Codex Sandbox Mode",
+      "description": "Codex CLI permissions. Antigravity uses its own plan and sandbox flags.",
       "required": false,
       "data": [
         {
@@ -86,6 +89,14 @@
       "description": "Optional absolute path to codex, codex.exe, or codex.cmd. Leave empty for automatic discovery.",
       "required": false,
       "placeholder": "Optional absolute executable path",
+      "default": ""
+    },
+    {
+      "name": "agyPath",
+      "type": "textfield",
+      "title": "Antigravity CLI Path",
+      "description": "Optional absolute path to the installed agy executable. Uses your existing CLI sign-in.",
+      "required": false,
       "default": ""
     }
   ],

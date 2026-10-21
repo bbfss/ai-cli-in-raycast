@@ -11,6 +11,7 @@ export type ModelMenuProps = {
   error: string;
   ready: boolean;
   shortcuts?: boolean;
+  allowCurrent?: boolean;
   onRefresh: () => void;
   onSelect: (selection: ModelSelection | null) => void;
 };
@@ -52,11 +53,13 @@ export function ModelMenu(props: ModelMenuProps) {
       isLoading={props.loading}
       onOpen={() => loadOnOpen(props)}
     >
-      <Action
-        title="Use Current Conversation Model"
-        icon={!props.selection ? Icon.Checkmark : Icon.Circle}
-        onAction={() => props.onSelect(null)}
-      />
+      {props.allowCurrent !== false && (
+        <Action
+          title="Use Current Conversation Model"
+          icon={!props.selection ? Icon.Checkmark : Icon.Circle}
+          onAction={() => props.onSelect(null)}
+        />
+      )}
       <ActionPanel.Section title="Model">
         {props.models.map((model) => (
           <Action

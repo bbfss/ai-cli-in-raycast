@@ -1,54 +1,40 @@
-# Codex in Raycast
+# AI in Raycast
 
-Continue a conversation with your already signed-in local Codex CLI directly inside Raycast. This extension is a native chat surface: it streams replies, sends follow-ups and steering instructions, and offers the model/effort combinations returned by your local CLI.
+Chat with your installed AI CLIs from one native Raycast window. Choose **Codex CLI** or **Antigravity CLI** in the Provider menu. Each has its own conversations, drafts, model choice, and setup record.
 
-## First-run setup
+## Use
 
-Before chat opens, complete the native two-step setup:
+1. Install and sign in to the CLI you want to use through its own terminal interface.
+2. Open **AI in Raycast** and choose a provider. Complete its connection check and choose an available model.
+3. Press **Enter** to open the floating composer, type, and press **Enter** to send. The full-width Markdown conversation remains on the same page.
+4. Use **Provider → Model → Effort Level → New Chat** below message entry, or inside the composer. **Cmd/Ctrl+P** opens providers and **Cmd/Ctrl+M** opens models. Each picker uses native Enter navigation.
 
-1. Check the local CLI connection. The extension initializes `codex app-server`, reads `account/read` without refreshing tokens, and loads `model/list`. If the active provider requires OpenAI authentication, you must already be signed in. Custom providers that do not require OpenAI authentication are supported.
-2. Choose a model and an effort level from the CLI catalog, then save. A previous valid choice is prefilled; models without an adjustable effort level say so.
+Switching providers restores that provider's last conversation. Stop a running response before switching. New Chat creates a fresh session in the selected CLI; recent chats are scoped to that CLI. Existing Codex sessions and storage keys are retained.
 
-The check sends no inference request and cannot guarantee model entitlement, provider credentials, quota, or network availability for the next answer. Failures keep setup open with retry and CLI preference actions. No chat thread or launch-argument message is started until setup has been saved. Changing connection preferences requires setup again. Existing conversations and completed setup records are preserved across updates.
+## Providers and limitations
 
-Use **Actions → CLI and Default Model** to reopen setup, and **Actions → Open Settings** for CLI path, directory, sandbox, and web-search preferences. The extension interface uses US English, following the [repository localization policy](https://github.com/raycast/extensions/blob/main/.github/copilot-instructions.md#6-localization). Model replies can use the language you request; saved message content is not translated or rewritten.
+| Feature                         | Codex CLI                                                  | Antigravity CLI (`agy`)                                     |
+| ------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
+| Bridge                          | Local app-server over stdio                                | Local stream-json subprocess                                |
+| Resume                          | Explicit thread ID                                         | Explicit conversation ID, persisted per local thread        |
+| Model discovery                 | app-server model/list                                      | agy models                                                  |
+| Streaming and stop              | Yes                                                        | Yes                                                         |
+| Add instructions during a reply | Supported                                                  | Wait or stop before sending another message                 |
+| Effort selection                | Supported levels from CLI                                  | Choose the CLI model variant; separate effort picker hidden |
+| Permissions                     | Selected Codex sandbox, no automatic interactive approvals | agy sandbox + plan mode; its guarantees differ from Codex   |
 
-## Chat
+The extension uses existing local CLI authentication. It does not import browser cookies, copy credentials, change global CLI configuration, or expose a network listener. A connection/catalog check does not prove inference entitlement, provider credential validity, quota, or network availability for the next message.
 
-- Open **Codex in Raycast**, or use it as a fallback for a question typed in Root Search.
-- Replies always stay in a full-width native Markdown reader, with no chat sidebar or placeholder list item.
-- Press **Enter** to open the native floating message composer. Type in its input field and press **Enter** to send; there is no Command+Enter requirement. While an answer is running, the same composer sends steering instructions to that turn.
-- Raycast closes the action popover after sending. The conversation stays on the same full-width page and streams immediately; press Enter to compose the next message without choosing a conversation or opening another page.
-- Searching, command execution, tool use, and interrupted/failed turn states remain visible during chat; healthy idle status does not add a persistent banner.
-- Markdown, code, tables, LaTeX and speaker avatars are retained, with the newest messages first. Typing into the composer does not re-render the entire transcript.
-- Model, effort level, and New Chat are directly below the message action, also inside the floating composer. Model and effort have separate native pickers; highlight **Effort Level** and press **Enter** to open the supported levels. Use **Up/Down** to select and **Enter** to confirm; the current level is selected when the list opens. Switching model preserves the effort when supported, otherwise uses that model's supported default.
-- Choose an actual CLI model/effort combination from **Actions → Model** or **Cmd/Ctrl+M**. Choices are remembered and apply to the next response; steering retains the current turn's model.
-- **Cmd/Ctrl+N** creates a conversation; **Cmd/Ctrl+.** stops a reply; **Cmd/Ctrl+C** copies the latest answer; **Cmd/Ctrl+Shift+C** copies the conversation.
-- **Recent Chats** opens an explicit short switcher for up to 12 chats stored by this extension. Conversation input does not search history.
+Optional preferences specify executable paths and the working directory. Codex Web Search and Codex Sandbox Mode apply to Codex only. Antigravity requires a native executable on Windows; shell wrappers are not executed.
 
-## Drafts and native controls
+Raycast's native full-width Detail has no permanent input field. The floating composer keeps native Markdown/code/math rendering and preserves drafts. An earlier send acknowledgement cannot clear newer input. Saved drafts can be sent directly or copied/pasted to edit because the native submenu input cannot be programmatically refilled.
 
-If a saved server thread cannot be resumed, the replacement conversation keeps the unsent draft and the old local record is retained. Resumed streaming updates reuse server item identities so partial replies are updated instead of duplicated.
+## Architecture
 
-The floating composer uses Raycast's native action-menu input with filtering disabled. Its section label previews the message that will be sent. A late acknowledgement from an earlier send cannot clear a newer message typed into the reopened composer. Closing the menu preserves the last non-empty draft; reopening offers **Send Saved Draft**. Because the public submenu API cannot programmatically fill its search field, use the offered copy action and paste to edit a restored draft, or type replacement text. **Clear Draft** explicitly discards it. A visibly empty new input never silently sends an old draft.
+`provider.ts` defines the common chat contract and capabilities. Codex retains its app-server implementation. `provider-antigravity.ts` adapts Antigravity events into the same lifecycle. `session-storage.ts` scopes persisted state by provider; Codex keeps its legacy keys. No CLI implicitly resumes its globally most recent conversation.
 
-The extension uses native controls rather than custom HTML/CSS or a separate app. Raycast's public full-width Detail has no permanent top input or top model dropdown, so the accepted design uses the floating composer and native Actions model selector. The native action input retains Raycast's built-in search placeholder; filtering is disabled and its contents are treated as a message.
+The provider/agent separation described by [Magpie](https://github.com/yetone/magpie) is a design reference. The current Antigravity adapter was implemented against the installed CLI protocol and real stream-json traces; deeper comparison with Magpie's gateway/session code is tracked in HANDOFF.md.
 
-## Requirements and preferences
+The display name is AI in Raycast. The internal extension ID remains `ask-codex-raycast` to preserve existing local data. The earlier Store application was withdrawn; this refactor is a development version, not a new Store listing.
 
-Install and sign in to the official [Codex CLI](https://github.com/openai/codex#installation) first. The extension automatically searches common macOS and Windows executable locations; set **Codex Path** when installed elsewhere. It uses `codex app-server` over local stdin/stdout, without an extension-owned service, bundled credentials, a CLI download, or an API-key preference.
-
-| Preference        | Behavior                                                                     |
-| ----------------- | ---------------------------------------------------------------------------- |
-| Codex Path        | Optional executable override, including Windows `.exe`/`.cmd` installations. |
-| Working Directory | Optional absolute directory for repository-aware questions.                  |
-| Web Search        | Allow the CLI to use live web search when enabled.                           |
-| Sandbox Mode      | Read-only by default; workspace-write/full access are explicit choices.      |
-
-Interactive tool approval requests are rejected because this native chat does not expose an approval interface. Codex's existing authentication, networking, and account limits still apply.
-
-## Scope
-
-Global CLI thread search, transcript export, rename/archive/restore management, projects, MCP administration, and usage dashboards are outside this extension's UI. The existing [Codex extension by asifk](https://www.raycast.com/asifk/codex) already covers thread management and opening the desktop app/terminal. The purpose here is to stay in Raycast while sending prompts and reading live replies.
-
-Existing Raycast-local history and model-selection storage keys are preserved through the display-name change. Removing management controls does not delete old local records or underlying Codex sessions. The earlier optional independent-window integration and its preferences have been removed.
+The UI follows Raycast's US-English interface convention. Conversation content can use any language requested by the user. Windows UI has not been manually verified.

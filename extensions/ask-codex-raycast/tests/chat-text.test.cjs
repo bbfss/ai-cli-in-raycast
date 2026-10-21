@@ -26,7 +26,7 @@ test("streaming reply retains a thinking placeholder", () => {
 
 test("empty conversation explains the Enter input action", () => {
   const output = conversationMarkdown([], "/assets", "", "");
-  assert.match(output, /Codex in Raycast/);
+  assert.match(output, /AI in Raycast/);
   assert.match(output, /Press Enter to open the message composer/);
 });
 

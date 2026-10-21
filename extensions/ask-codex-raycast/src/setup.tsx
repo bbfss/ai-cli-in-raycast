@@ -10,28 +10,34 @@ import {
   Toast,
 } from "@raycast/api";
 import { useEffect, useRef, useState } from "react";
-import { CodexAppServer, type CodexModel, type ModelSelection } from "./codex";
+import { type CodexModel, type ModelSelection } from "./codex";
 import { messageOf } from "./conversations";
 
-import { MODEL_SELECTION_KEY } from "./model-menu";
+import { ProviderMenu } from "./provider-menu";
+import { PROVIDERS, storageKeys } from "./session-storage";
 import {
-  connectionSignature,
-  SETUP_KEY,
-  validSelection,
-  type Setup,
-} from "./setup-state";
+  createProviderClient,
+  type ChatClient,
+  type ProviderId,
+} from "./provider";
+import { connectionSignature, validSelection, type Setup } from "./setup-state";
 
 export function SetupWizard({
   preferences,
+  provider,
+  onProviderChange,
   previous,
   selection: savedSelection,
   onComplete,
 }: {
   preferences: Preferences;
+  provider: ProviderId;
+  onProviderChange: (value: string) => Promise<void>;
   previous: Setup | null;
   selection: ModelSelection | null;
   onComplete: (setup: Setup) => void;
 }) {
+  const keys = storageKeys(provider);
   const [step, setStep] = useState(1);
   const [models, setModels] = useState<CodexModel[]>([]);
   const [model, setModel] = useState("");
@@ -43,7 +49,7 @@ export function SetupWizard({
   const mounted = useRef(true);
   const checkingRef = useRef(false);
   const savingRef = useRef(false);
-  const clientRef = useRef<CodexAppServer | null>(null);
+  const clientRef = useRef<ChatClient | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -58,11 +64,12 @@ export function SetupWizard({
     setChecking(true);
     setError("");
     setCheckedAt(0);
-    const client = new CodexAppServer({
+    const client = createProviderClient(provider, {
       onEvent: () => undefined,
       sandbox: preferences.sandboxMode || "read-only",
       cwd: preferences.workingDirectory,
       codexPath: preferences.codexPath,
+      agyPath: preferences.agyPath,
       liveSearch: preferences.liveSearch ?? true,
     });
     clientRef.current = client;
@@ -113,14 +120,11 @@ export function SetupWizard({
         version: 2,
         selection: { model, effort },
         checkedAt,
-        connection: connectionSignature(preferences),
+        connection: connectionSignature(preferences, provider),
       };
       // Mark setup complete last, so a failed save cannot bypass onboarding.
-      await LocalStorage.setItem(
-        MODEL_SELECTION_KEY,
-        JSON.stringify(setup.selection),
-      );
-      await LocalStorage.setItem(SETUP_KEY, JSON.stringify(setup));
+      await LocalStorage.setItem(keys.model, JSON.stringify(setup.selection));
+      await LocalStorage.setItem(keys.setup, JSON.stringify(setup));
       if (mounted.current) onComplete(setup);
     } catch (reason) {
       await showToast({
@@ -141,7 +145,7 @@ export function SetupWizard({
       onAction={openExtensionPreferences}
     />
   );
-  const title = "Set Up Codex in Raycast";
+  const title = "Set Up AI in Raycast";
   if (step === 1)
     return (
       <Detail
@@ -149,7 +153,9 @@ export function SetupWizard({
         isLoading={checking}
         markdown={[
           "### 1 of 2 · CLI Connection",
-          "Install Codex CLI and run `codex login` in your terminal first. If you use a custom provider, configure it in Codex CLI.",
+          provider === "codex"
+            ? "Install Codex CLI and run `codex login` first."
+            : "Install Antigravity CLI (`agy`) and sign in using its own terminal interface first.",
           "This check connects to your local CLI, reads its sign-in status and loads its model catalog. It does not send a prompt. Actual model access is confirmed when you send a message.",
           checking
             ? "Checking Connection…"
@@ -164,11 +170,20 @@ export function SetupWizard({
               icon={Icon.Link}
               onAction={checkConnection}
             />
-            {preferencesAction}
-            <Action.OpenInBrowser
-              title="Install Codex CLI"
-              url="https://github.com/openai/codex#installation"
+            <ProviderMenu
+              providers={PROVIDERS}
+              selected={provider}
+              onSelect={(value) => {
+                if (!checkingRef.current) void onProviderChange(value);
+              }}
             />
+            {preferencesAction}
+            {provider === "codex" && (
+              <Action.OpenInBrowser
+                title="Install Codex CLI"
+                url="https://github.com/openai/codex#installation"
+              />
+            )}
           </ActionPanel>
         }
       />

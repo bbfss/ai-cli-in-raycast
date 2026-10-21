@@ -1,10 +1,13 @@
-import { SetupWizard } from "./setup";
 import {
-  connectionSignature,
-  parseSetup,
-  SETUP_KEY,
-  type Setup,
-} from "./setup-state";
+  createProviderClient,
+  providerCapabilities,
+  type ProviderId,
+  type ChatClient,
+} from "./provider";
+import { ProviderMenu } from "./provider-menu";
+import { PROVIDERS, ACTIVE_PROVIDER_KEY, storageKeys } from "./session-storage";
+import { SetupWizard } from "./setup";
+import { connectionSignature, parseSetup, type Setup } from "./setup-state";
 import {
   Action,
   ActionPanel,
@@ -21,15 +24,10 @@ import {
   type LaunchProps,
 } from "@raycast/api";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  CodexAppServer,
-  type CodexEvent,
-  type CodexModel,
-  type ModelSelection,
-} from "./codex";
+import { type CodexEvent, type CodexModel, type ModelSelection } from "./codex";
 import { useSessionHistory, type Page } from "./history";
 import { conversationMarkdown } from "./chat-text";
-import { ModelMenu, EffortMenu, MODEL_SELECTION_KEY } from "./model-menu";
+import { ModelMenu, EffortMenu } from "./model-menu";
 import { MessageComposer } from "./message-composer";
 import {
   asRecord,
@@ -44,22 +42,53 @@ import {
   reconnectedConversation,
   applyAssistantMessage,
   transcript,
-  LIBRARY_KEY,
-  LEGACY_KEY,
   type ChatMessage,
   type StoredConversation,
   type ConversationLibrary,
 } from "./conversations";
 
-export default function CodexInRaycast(
+export default function AIInRaycast(
   props: LaunchProps<{ arguments: Arguments.Index }>,
 ) {
   const preferences = getPreferenceValues<Preferences>();
-  const signature = connectionSignature(preferences);
+  const [provider, setProvider] = useState<ProviderId | null>(null);
+  const [providerError, setProviderError] = useState("");
+  useEffect(() => {
+    let disposed = false;
+    void LocalStorage.getItem<string>(ACTIVE_PROVIDER_KEY)
+      .then((value) => {
+        if (!disposed)
+          setProvider(value === "antigravity" ? "antigravity" : "codex");
+      })
+      .catch((reason) => {
+        if (!disposed) setProviderError(messageOf(reason));
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
+  const signature = connectionSignature(preferences, provider || "codex");
   const launchConsumed = useRef(false);
+  if (!provider)
+    return <Detail isLoading={!providerError} markdown={providerError || ""} />;
+  async function changeProvider(value: string) {
+    if (value !== "codex" && value !== "antigravity") return;
+    try {
+      await LocalStorage.setItem(ACTIVE_PROVIDER_KEY, value);
+      setProvider(value);
+    } catch (reason) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Could Not Switch CLI",
+        message: messageOf(reason),
+      });
+    }
+  }
   return (
     <ConfiguredCommand
-      key={signature}
+      key={`${provider}:${signature}`}
+      provider={provider}
+      onProviderChange={changeProvider}
       launch={props}
       preferences={preferences}
       launchConsumed={launchConsumed}
@@ -71,11 +100,16 @@ function ConfiguredCommand({
   launch,
   preferences,
   launchConsumed,
+  provider,
+  onProviderChange,
 }: {
   launch: LaunchProps<{ arguments: Arguments.Index }>;
   preferences: Preferences;
   launchConsumed: { current: boolean };
+  provider: ProviderId;
+  onProviderChange: (value: string) => Promise<void>;
 }) {
+  const keys = storageKeys(provider);
   const [loaded, setLoaded] = useState(false);
   const [setup, setSetup] = useState<Setup | null>(null);
   const [savedSelection, setSavedSelection] = useState<ModelSelection | null>(
@@ -88,9 +122,8 @@ function ConfiguredCommand({
     let cancelled = false;
     async function load() {
       setLoadError("");
-      const saved = parseSetup(await LocalStorage.getItem<string>(SETUP_KEY));
-      const rawSelection =
-        await LocalStorage.getItem<string>(MODEL_SELECTION_KEY);
+      const saved = parseSetup(await LocalStorage.getItem<string>(keys.setup));
+      const rawSelection = await LocalStorage.getItem<string>(keys.model);
       let selection: ModelSelection | null = null;
       try {
         const parsed = JSON.parse(rawSelection || "null");
@@ -134,11 +167,13 @@ function ConfiguredCommand({
   if (
     editing ||
     !setup ||
-    setup.connection !== connectionSignature(preferences)
+    setup.connection !== connectionSignature(preferences, provider)
   )
     return (
       <SetupWizard
         preferences={preferences}
+        provider={provider}
+        onProviderChange={onProviderChange}
         previous={setup}
         selection={savedSelection}
         onComplete={(value) => {
@@ -150,6 +185,8 @@ function ConfiguredCommand({
     );
   return (
     <NativeChat
+      provider={provider}
+      onProviderChange={onProviderChange}
       {...(launchConsumed.current
         ? { ...launch, arguments: { prompt: "" }, fallbackText: "" }
         : launch)}
@@ -168,9 +205,13 @@ function NativeChat(
   props: LaunchProps<{ arguments: Arguments.Index }> & {
     onConfigure: (selection: ModelSelection | null) => void;
     onPromptConsumed: () => void;
+    provider: ProviderId;
+    onProviderChange: (value: string) => Promise<void>;
   },
 ) {
   const preferences = getPreferenceValues<Preferences>();
+  const keys = storageKeys(props.provider);
+  const capabilities = providerCapabilities(props.provider);
   const initialPrompt =
     props.fallbackText?.trim() || props.arguments?.prompt?.trim() || "";
   const [conversation, setConversation] =
@@ -178,7 +219,7 @@ function NativeChat(
   const [draft, setDraft] = useState("");
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("Connecting to Codex…");
+  const [status, setStatus] = useState(`Connecting to ${capabilities.label}…`);
   const [statusVisible, setStatusVisible] = useState(true);
   function updateStatus(text: string, visible = true) {
     setStatus(text);
@@ -209,7 +250,7 @@ function NativeChat(
     sessions: [],
   });
   const storageReadyRef = useRef(false);
-  const clientRef = useRef<CodexAppServer | null>(null);
+  const clientRef = useRef<ChatClient | null>(null);
   const readyRef = useRef(false);
   const mountedRef = useRef(true);
   const initialSentRef = useRef(false);
@@ -237,7 +278,7 @@ function NativeChat(
     const encoded = JSON.stringify(libraryRef.current);
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
-      .then(() => LocalStorage.setItem(LIBRARY_KEY, encoded));
+      .then(() => LocalStorage.setItem(keys.library, encoded));
     void saveQueueRef.current.catch((reason) => {
       if (mountedRef.current)
         setError(`Could not save conversation: ${messageOf(reason)}`);
@@ -294,9 +335,7 @@ function NativeChat(
     setModelSelection(selection);
     modelSaveQueueRef.current = modelSaveQueueRef.current
       .catch(() => undefined)
-      .then(() =>
-        LocalStorage.setItem(MODEL_SELECTION_KEY, JSON.stringify(selection)),
-      );
+      .then(() => LocalStorage.setItem(keys.model, JSON.stringify(selection)));
     void modelSaveQueueRef.current.catch((reason) =>
       showToast({
         style: Toast.Style.Failure,
@@ -322,7 +361,7 @@ function NativeChat(
     activeReplyRef.current = null;
     setReady(false);
     setError("");
-    updateStatus("Connecting to Codex…");
+    updateStatus(`Connecting to ${capabilities.label}…`);
     modelsRequestRef.current = null;
     modelsRef.current = [];
     setModels([]);
@@ -398,7 +437,7 @@ function NativeChat(
         setError(
           asString(asRecord(params.error).message) ||
             asString(params.message) ||
-            "Codex returned an error",
+            `${capabilities.label} returned an error`,
         );
       }
       if (
@@ -416,24 +455,24 @@ function NativeChat(
         setBusy(false);
         setError(
           asString(params.stderr) ||
-            'Codex connection closed. Please use "Reconnect".',
+            `${capabilities.label} connection closed. Please reconnect.`,
         );
         updateStatus("Connection closed");
       }
     };
-    const client = new CodexAppServer({
+    const client = createProviderClient(props.provider, {
       onEvent: handleEvent,
       sandbox: preferences.sandboxMode || "read-only",
       cwd: preferences.workingDirectory,
       codexPath: preferences.codexPath,
+      agyPath: preferences.agyPath,
       liveSearch: preferences.liveSearch ?? true,
     });
     clientRef.current = client;
     const initialize = async () => {
       await saveQueueRef.current.catch(() => undefined);
       await modelSaveQueueRef.current.catch(() => undefined);
-      const savedModel =
-        await LocalStorage.getItem<string>(MODEL_SELECTION_KEY);
+      const savedModel = await LocalStorage.getItem<string>(keys.model);
       let selection: ModelSelection | null = null;
       try {
         const saved = asRecord(savedModel ? JSON.parse(savedModel) : null);
@@ -449,8 +488,8 @@ function NativeChat(
       modelSelectionRef.current = selection;
       setModelSelection(selection);
       const library = parseLibrary(
-        await LocalStorage.getItem<string>(LIBRARY_KEY),
-        await LocalStorage.getItem<string>(LEGACY_KEY),
+        await LocalStorage.getItem<string>(keys.library),
+        await LocalStorage.getItem<string>(keys.legacy),
       );
       if (disposed) return;
       libraryRef.current = library;
@@ -532,6 +571,8 @@ function NativeChat(
       client.close();
     };
   }, [
+    props.provider,
+    preferences.agyPath,
     preferences.codexPath,
     preferences.workingDirectory,
     preferences.sandboxMode,
@@ -555,6 +596,10 @@ function NativeChat(
       throw new Error("Service not connected. Please reopen the command.");
     setError("");
     if (client.currentTurnId) {
+      if (!capabilities.supportsSteering)
+        throw new Error(
+          "Wait for the current reply or stop it before sending another message.",
+        );
       try {
         await client.steer(prompt);
         if (!mountedRef.current) return;
@@ -661,7 +706,15 @@ function NativeChat(
 
   async function sendPrompt(prompt: string): Promise<boolean> {
     const text = prompt.trim();
-    if (!text || requestPendingRef.current || switching) return false;
+    if (!text || switching) return false;
+    if (busy && !capabilities.supportsSteering) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Wait for the Reply or Stop It First",
+      });
+      return false;
+    }
+    if (requestPendingRef.current) return false;
     if (!readyRef.current) {
       await showToast({
         style: Toast.Style.Failure,
@@ -822,7 +875,7 @@ function NativeChat(
   const codexNotFound = Boolean(error && !ready);
   const secondaryActions = (
     <>
-      {codexNotFound && (
+      {codexNotFound && props.provider === "codex" && (
         <Action.OpenInBrowser
           title="Install Codex CLI"
           icon={Icon.Download}
@@ -865,7 +918,7 @@ function NativeChat(
       )}
       <Action.CopyToClipboard
         title="Copy Current Conversation"
-        content={transcript(conversation.messages)}
+        content={transcript(conversation.messages, capabilities.label)}
         shortcut={{
           modifiers: [process.platform === "darwin" ? "cmd" : "ctrl", "shift"],
           key: "c",
@@ -906,8 +959,9 @@ function NativeChat(
         environment.assetsPath,
         statusVisible ? status : "",
         error,
+        capabilities.label,
       ),
-    [visibleMessages, ready, error, status, statusVisible],
+    [visibleMessages, ready, error, status, statusVisible, capabilities.label],
   );
   const historyProps = useSessionHistory({
     page,
@@ -918,6 +972,7 @@ function NativeChat(
     onNew: newChat,
   });
   const modelMenuProps = {
+    allowCurrent: props.provider === "codex",
     models,
     selection: modelSelection,
     current: currentModel,
@@ -929,8 +984,36 @@ function NativeChat(
   };
   const conversationControls = (shortcuts = true) => (
     <ActionPanel.Section>
+      <ProviderMenu
+        providers={PROVIDERS}
+        shortcuts={shortcuts}
+        selected={props.provider}
+        onSelect={async (value) => {
+          if (value === props.provider) return;
+          if (busy || switching || requestPendingRef.current) {
+            await showToast({
+              style: Toast.Style.Failure,
+              title: "Stop the Current Reply First",
+            });
+            return;
+          }
+          try {
+            if (persistedRef.current)
+              save({ ...persistedRef.current, draft: draftRef.current });
+            await saveQueueRef.current;
+            await modelSaveQueueRef.current;
+            await props.onProviderChange(value);
+          } catch (reason) {
+            await showToast({
+              style: Toast.Style.Failure,
+              title: "Could Not Save Conversation",
+              message: messageOf(reason),
+            });
+          }
+        }}
+      />
       <ModelMenu {...modelMenuProps} shortcuts={shortcuts} />
-      <EffortMenu {...modelMenuProps} />
+      {capabilities.supportsEffort && <EffortMenu {...modelMenuProps} />}
       <Action
         title="New Chat"
         icon={Icon.Plus}
@@ -957,7 +1040,7 @@ function NativeChat(
       ) : (
         <MessageComposer
           draft={draft}
-          busy={busy}
+          busy={busy && capabilities.supportsSteering}
           ready={ready}
           onChange={setDraft}
           onSend={sendPrompt}
@@ -971,7 +1054,7 @@ function NativeChat(
   if (page === "chat") {
     return (
       <Detail
-        navigationTitle="Codex in Raycast"
+        navigationTitle="AI in Raycast"
         markdown={chatMarkdown}
         isLoading={(!ready && !error) || busy || switching}
         actions={chatActions()}
@@ -980,7 +1063,7 @@ function NativeChat(
   }
   return (
     <List
-      navigationTitle="Codex in Raycast"
+      navigationTitle="AI in Raycast"
       filtering={false}
       throttle={false}
       isShowingDetail={false}

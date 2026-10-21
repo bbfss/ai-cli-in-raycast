@@ -245,14 +245,17 @@ export function messagesFromThread(thread: unknown): ChatMessage[] {
   return messages;
 }
 
-export function transcript(messages: ChatMessage[]): string {
+export function transcript(
+  messages: ChatMessage[],
+  assistant = "Codex",
+): string {
   if (!messages.length)
     return "# New Chat\n\nPress Enter to open the message composer, enter your message, and press Enter to send.";
   return messages
     .map((message) => {
       const heading =
         message.role === "assistant"
-          ? "Codex"
+          ? assistant
           : message.kind === "steer"
             ? "Add Instructions"
             : "You";
