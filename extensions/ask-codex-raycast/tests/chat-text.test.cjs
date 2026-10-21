@@ -7,7 +7,7 @@ test("conversation preserves avatars and newest-first ordering without mutating 
   const messages = [{ id: "1", role: "user", content: "Question" }, { id: "2", role: "assistant", content: "**Answer**" }];
   const output = conversationMarkdown(messages, "/my assets", "", "");
   assert.ok(output.indexOf("**Answer**") < output.indexOf("Question"));
-  assert.match(output, /command-icon\.png/);
+  assert.match(output, /suite-icon\.png/);
   assert.match(output, /user-avatar\.svg/);
   assert.match(output, /my%20assets/);
   assert.equal(messages[0].content, "Question");
@@ -26,7 +26,7 @@ test("streaming reply retains a thinking placeholder", () => {
 
 test("empty conversation explains the Enter input action", () => {
   const output = conversationMarkdown([], "/assets", "", "");
-  assert.match(output, /AI in Raycast/);
+  assert.match(output, /Codex in Raycast/);
   assert.match(output, /Press Enter to open the message composer/);
 });
 

@@ -1,3 +1,4 @@
+import { setLanguage, t } from "./i18n";
 import {
   createProviderClient,
   providerCapabilities,
@@ -55,6 +56,7 @@ export default function AIInRaycast(
   props: LaunchProps<{ arguments: Arguments.Index }>,
 ) {
   const preferences = getPreferenceValues<Preferences>();
+  setLanguage(preferences.uiLanguage);
   const provider = providerForCommand(environment.commandName);
   const signature = connectionSignature(preferences, provider);
   const launchConsumed = useRef(false);
@@ -68,8 +70,8 @@ export default function AIInRaycast(
     } catch (reason) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Could Not Switch CLI",
-        message: `${messageOf(reason)} Enable this command in Raycast Settings → Extensions → AI in Raycast.`,
+        title: t("Could Not Switch CLI"),
+        message: `${messageOf(reason)} ${t("Enable this command in Raycast Settings → Extensions → AI CLI in Raycast.")}`,
       });
     }
   }
@@ -145,7 +147,7 @@ function ConfiguredCommand({
           loadError ? (
             <ActionPanel>
               <Action
-                title="Retry"
+                title={t("Retry")}
                 onAction={() => setAttempt((value) => value + 1)}
               />
             </ActionPanel>
@@ -208,7 +210,9 @@ function NativeChat(
   const [draft, setDraft] = useState("");
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState(`Connecting to ${capabilities.label}…`);
+  const [status, setStatus] = useState(
+    t("Connecting to {provider}…", { provider: capabilities.label }),
+  );
   const [statusVisible, setStatusVisible] = useState(true);
   function updateStatus(text: string, visible = true) {
     setStatus(text);
@@ -270,7 +274,11 @@ function NativeChat(
       .then(() => LocalStorage.setItem(keys.library, encoded));
     void saveQueueRef.current.catch((reason) => {
       if (mountedRef.current)
-        setError(`Could not save conversation: ${messageOf(reason)}`);
+        setError(
+          t("Could not save conversation: {error}", {
+            error: messageOf(reason),
+          }),
+        );
     });
   }
 
@@ -328,7 +336,7 @@ function NativeChat(
     void modelSaveQueueRef.current.catch((reason) =>
       showToast({
         style: Toast.Style.Failure,
-        title: "Could not save model selection",
+        title: t("Could not save model selection"),
         message: messageOf(reason),
       }),
     );
@@ -337,17 +345,19 @@ function NativeChat(
       title: selection
         ? [
             selection.model === "__cli_default__"
-              ? "CLI Default"
+              ? t("CLI Default")
               : selection.model,
             selection.effort,
           ]
             .filter(Boolean)
             .join(" · ")
-        : "Use Current Conversation Model",
+        : t("Use Current Conversation Model"),
       message:
         busy && capabilities.supportsSteering
-          ? "Used for the next reply; steering the current response will still use the original model."
-          : "This setting applies to the next message.",
+          ? t(
+              "Used for the next reply; steering the current response will still use the original model.",
+            )
+          : t("This setting applies to the next message."),
     });
   }
 
@@ -358,7 +368,9 @@ function NativeChat(
     activeReplyRef.current = null;
     setReady(false);
     setError("");
-    updateStatus(`Connecting to ${capabilities.label}…`);
+    updateStatus(
+      t("Connecting to {provider}…", { provider: capabilities.label }),
+    );
     modelsRequestRef.current = null;
     modelsRef.current = [];
     setModels([]);
@@ -377,18 +389,18 @@ function NativeChat(
         setBusy(true);
         updateStatus(
           capabilities.supportsSteering
-            ? "Thinking · Press Enter to steer"
-            : "Thinking · You can stop the response",
+            ? t("Thinking · Press Enter to steer")
+            : t("Thinking · You can stop the response"),
         );
       }
       if (event.method === "item/started") {
         const type = asString(asRecord(params.item).type);
         if (type === "webSearch")
-          updateStatus("Searching the web · Can still steer");
+          updateStatus(t("Searching the web · Can still steer"));
         else if (type === "commandExecution")
-          updateStatus("Running command · Can stop or steer");
+          updateStatus(t("Running command · Can stop or steer"));
         else if (type === "mcpToolCall")
-          updateStatus("Calling tool · Can still steer");
+          updateStatus(t("Calling tool · Can still steer"));
       }
       if (
         event.method === "item/agentMessage/delta" ||
@@ -412,8 +424,8 @@ function NativeChat(
         }));
         updateStatus(
           capabilities.supportsSteering
-            ? "Responding · Press Enter to steer"
-            : "Responding · You can stop the response",
+            ? t("Responding · Press Enter to steer")
+            : t("Responding · You can stop the response"),
         );
       }
       if (event.method === "turn/completed") {
@@ -423,10 +435,10 @@ function NativeChat(
         if (failure) setError(failure);
         updateStatus(
           turn.status === "failed"
-            ? "Response failed. You can retry"
+            ? t("Response failed. You can retry")
             : turn.status === "interrupted"
-              ? "Stopped · Press Enter to continue chatting"
-              : "Completed · Press Enter to continue chatting",
+              ? t("Stopped · Press Enter to continue chatting")
+              : t("Completed · Press Enter to continue chatting"),
           turn.status !== "completed",
         );
         setConversation((previous) => ({
@@ -442,7 +454,7 @@ function NativeChat(
         setError(
           asString(asRecord(params.error).message) ||
             asString(params.message) ||
-            `${capabilities.label} returned an error`,
+            t("{provider} returned an error", { provider: capabilities.label }),
         );
       }
       if (
@@ -451,7 +463,9 @@ function NativeChat(
         event.method === "request/unsupported"
       ) {
         setError(
-          "This action requires interactive confirmation, which is not automatically authorized in this interface. Please stop this turn and continue this session in the Codex CLI.",
+          t(
+            "This action requires interactive confirmation, which is not automatically authorized in this interface. Please stop this turn and continue this session in the Codex CLI.",
+          ),
         );
       }
       if (event.method === "process/exited") {
@@ -460,9 +474,11 @@ function NativeChat(
         setBusy(false);
         setError(
           asString(params.stderr) ||
-            `${capabilities.label} connection closed. Please reconnect.`,
+            t("{provider} connection closed. Please reconnect.", {
+              provider: capabilities.label,
+            }),
         );
-        updateStatus("Connection closed");
+        updateStatus(t("Connection closed"));
       }
     };
     const client = createProviderClient(props.provider, {
@@ -476,6 +492,7 @@ function NativeChat(
       workbuddyPath: preferences.workbuddyPath,
       geminiPath: preferences.geminiPath,
       liveSearch: preferences.liveSearch ?? true,
+      autoDetectCli: preferences.autoDetectCli,
     });
     clientRef.current = client;
     const initialize = async () => {
@@ -532,7 +549,10 @@ function NativeChat(
           messages = [];
           if (stored.messages.length)
             setError(
-              `Previous conversation could not be restored and has been kept in history: ${messageOf(reason)}`,
+              t(
+                "Previous conversation could not be restored and has been kept in history: {error}",
+                { error: messageOf(reason) },
+              ),
             );
         }
       } else {
@@ -560,9 +580,9 @@ function NativeChat(
       updateStatus(
         client.currentTurnId
           ? capabilities.supportsSteering
-            ? "Thinking · Press Enter to steer"
-            : "Thinking · You can stop the response"
-          : "Connected · Press Enter to send",
+            ? t("Thinking · Press Enter to steer")
+            : t("Thinking · You can stop the response")
+          : t("Connected · Press Enter to send"),
         Boolean(client.currentTurnId),
       );
       void refreshModels().catch(() => undefined);
@@ -571,7 +591,7 @@ function NativeChat(
     void initRef.current.catch((reason: unknown) => {
       if (!disposed) {
         setError(messageOf(reason));
-        updateStatus("Connection failed");
+        updateStatus(t("Connection failed"));
       }
     });
     return () => {
@@ -592,6 +612,7 @@ function NativeChat(
     preferences.workingDirectory,
     preferences.sandboxMode,
     preferences.liveSearch,
+    preferences.autoDetectCli,
     connectionAttempt,
   ]);
 
@@ -608,12 +629,14 @@ function NativeChat(
     if (!mountedRef.current) return;
     const client = clientRef.current;
     if (!client || !readyRef.current)
-      throw new Error("Service not connected. Please reopen the command.");
+      throw new Error(t("Service not connected. Please reopen the command."));
     setError("");
     if (client.currentTurnId) {
       if (!capabilities.supportsSteering)
         throw new Error(
-          "Wait for the current reply or stop it before sending another message.",
+          t(
+            "Wait for the current reply or stop it before sending another message.",
+          ),
         );
       try {
         await client.steer(prompt);
@@ -631,7 +654,7 @@ function NativeChat(
             },
           ],
         }));
-        updateStatus("Steer sent");
+        updateStatus(t("Steer sent"));
         return;
       } catch (reason) {
         // The turn may complete between pressing Enter and the steer RPC.
@@ -649,7 +672,9 @@ function NativeChat(
         (selection.effort && !model.efforts.includes(selection.effort))
       ) {
         throw new Error(
-          "The selected model or effort level is no longer available. Please reselect a model in Actions at the bottom.",
+          t(
+            "The selected model or effort level is no longer available. Please reselect a model in Actions at the bottom.",
+          ),
         );
       }
     }
@@ -659,8 +684,8 @@ function NativeChat(
     setBusy(true);
     updateStatus(
       capabilities.supportsSteering
-        ? "Thinking · Press Enter to steer"
-        : "Thinking · You can stop the response",
+        ? t("Thinking · Press Enter to steer")
+        : t("Thinking · You can stop the response"),
     );
     setConversation((previous) => ({
       ...previous,
@@ -708,7 +733,7 @@ function NativeChat(
     setDraft((current) => current || prompt);
     await showToast({
       style: Toast.Style.Failure,
-      title: "Failed to send",
+      title: t("Failed to send"),
       message,
     });
   }
@@ -729,7 +754,7 @@ function NativeChat(
     if (busy && !capabilities.supportsSteering) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Wait for the Reply or Stop It First",
+        title: t("Wait for the Reply or Stop It First"),
       });
       return false;
     }
@@ -737,9 +762,10 @@ function NativeChat(
     if (!readyRef.current) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Service not connected",
-        message:
+        title: t("Service not connected"),
+        message: t(
           'Text has been preserved. Please wait for connection or click "Reconnect".',
+        ),
       });
       return false;
     }
@@ -760,7 +786,7 @@ function NativeChat(
     if (busy || requestPendingRef.current || switching) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Please stop the current response first",
+        title: t("Please stop the current response first"),
       });
       return;
     }
@@ -770,7 +796,7 @@ function NativeChat(
       await initRef.current;
       const client = clientRef.current;
       if (!client || !readyRef.current)
-        throw new Error("Service not connected");
+        throw new Error(t("Service not connected"));
       if (persistedRef.current) save(persistedRef.current);
       const threadId = await client.startThread();
       setCurrentModel(client.currentModelSelection);
@@ -787,7 +813,7 @@ function NativeChat(
       setPage("chat");
       activeReplyRef.current = null;
       setError("");
-      updateStatus("New Chat · Press Enter to send", false);
+      updateStatus(t("New Chat · Press Enter to send"), false);
     } catch (reason) {
       await reportFailure(reason, "");
     } finally {
@@ -804,8 +830,8 @@ function NativeChat(
     if (busy || requestPendingRef.current || switching) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Please stop the current response first",
-        message: "You can switch conversations after stopping.",
+        title: t("Please stop the current response first"),
+        message: t("You can switch conversations after stopping."),
       });
       return;
     }
@@ -816,7 +842,7 @@ function NativeChat(
       const client = clientRef.current;
       if (!client || !readyRef.current || !session.threadId)
         throw new Error(
-          "Service not connected. Please return to chat and reconnect.",
+          t("Service not connected. Please return to chat and reconnect."),
         );
       if (persistedRef.current) save(persistedRef.current);
       const threadId = await client.resumeThread(session.threadId);
@@ -844,9 +870,9 @@ function NativeChat(
       updateStatus(
         client.currentTurnId
           ? capabilities.supportsSteering
-            ? "Thinking · Press Enter to steer"
-            : "Thinking · You can stop the response"
-          : "Session restored · Press Enter to continue chatting",
+            ? t("Thinking · Press Enter to steer")
+            : t("Thinking · You can stop the response")
+          : t("Session restored · Press Enter to continue chatting"),
         Boolean(client.currentTurnId),
       );
       setCurrentModel(client.currentModelSelection);
@@ -855,7 +881,7 @@ function NativeChat(
     } catch (reason) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Could not open conversation",
+        title: t("Could not open conversation"),
         message: messageOf(reason),
       });
     } finally {
@@ -898,14 +924,14 @@ function NativeChat(
     <>
       {codexNotFound && props.provider === "codex" && (
         <Action.OpenInBrowser
-          title="Install Codex CLI"
+          title={t("Install Codex CLI")}
           icon={Icon.Download}
           url="https://github.com/openai/codex#installation"
         />
       )}
       {busy && (
         <Action
-          title="Stop Response"
+          title={t("Stop Response")}
           icon={Icon.Stop}
           shortcut={{
             modifiers: [process.platform === "darwin" ? "cmd" : "ctrl"],
@@ -913,7 +939,7 @@ function NativeChat(
           }}
           onAction={async () => {
             try {
-              updateStatus("Stopping…");
+              updateStatus(t("Stopping…"));
               await clientRef.current?.interrupt();
             } catch (reason) {
               await reportFailure(reason, "");
@@ -922,7 +948,7 @@ function NativeChat(
         />
       )}
       <Action
-        title="Recent Chats"
+        title={t("Recent Chats")}
         icon={Icon.Clock}
         shortcut={{
           modifiers: [process.platform === "darwin" ? "cmd" : "ctrl", "shift"],
@@ -932,13 +958,13 @@ function NativeChat(
       />
       {answer && (
         <Action.CopyToClipboard
-          title="Copy Response"
+          title={t("Copy Response")}
           content={answer}
           shortcut={Keyboard.Shortcut.Common.Copy}
         />
       )}
       <Action.CopyToClipboard
-        title="Copy Current Conversation"
+        title={t("Copy Current Conversation")}
         content={transcript(conversation.messages, capabilities.label)}
         shortcut={{
           modifiers: [process.platform === "darwin" ? "cmd" : "ctrl", "shift"],
@@ -946,13 +972,13 @@ function NativeChat(
         }}
       />
       <Action
-        title="CLI and Default Model"
+        title={t("CLI and Default Model")}
         icon={Icon.Gear}
         onAction={() => {
           if (busy || switching || requestPendingRef.current) {
             void showToast({
               style: Toast.Style.Failure,
-              title: "Please stop the current response first",
+              title: t("Please stop the current response first"),
             });
             return;
           }
@@ -960,9 +986,45 @@ function NativeChat(
         }}
       />
       <Action
-        title="Open Settings"
+        title={t("Open Settings")}
         icon={Icon.Gear}
         onAction={openExtensionPreferences}
+      />
+      <Action
+        title={t("CLI Settings")}
+        icon={Icon.Terminal}
+        onAction={async () => {
+          if (busy || switching || requestPendingRef.current) {
+            await showToast({
+              style: Toast.Style.Failure,
+              title: t("Stop the Current Reply First"),
+            });
+            return;
+          }
+          requestPendingRef.current = true;
+          setSwitching(true);
+          try {
+            if (persistedRef.current)
+              save({ ...persistedRef.current, draft: draftRef.current });
+            await saveQueueRef.current;
+            await modelSaveQueueRef.current;
+            if (!mountedRef.current) return;
+            await launchCommand({
+              name: "cli-settings",
+              type: LaunchType.UserInitiated,
+            });
+          } catch (reason) {
+            if (mountedRef.current)
+              await showToast({
+                style: Toast.Style.Failure,
+                title: t("Could Not Open CLI Settings"),
+                message: messageOf(reason),
+              });
+          } finally {
+            requestPendingRef.current = false;
+            if (mountedRef.current) setSwitching(false);
+          }
+        }}
       />
     </>
   );
@@ -1014,7 +1076,7 @@ function NativeChat(
           if (busy || switching || requestPendingRef.current) {
             await showToast({
               style: Toast.Style.Failure,
-              title: "Stop the Current Reply First",
+              title: t("Stop the Current Reply First"),
             });
             return;
           }
@@ -1029,7 +1091,7 @@ function NativeChat(
           } catch (reason) {
             await showToast({
               style: Toast.Style.Failure,
-              title: "Could Not Save Conversation",
+              title: t("Could Not Save Conversation"),
               message: messageOf(reason),
             });
           } finally {
@@ -1041,7 +1103,7 @@ function NativeChat(
       <ModelMenu {...modelMenuProps} shortcuts={shortcuts} />
       {capabilities.supportsEffort && <EffortMenu {...modelMenuProps} />}
       <Action
-        title="New Chat"
+        title={t("New Chat")}
         icon={Icon.Plus}
         shortcut={shortcuts ? Keyboard.Shortcut.Common.New : undefined}
         onAction={newChat}
@@ -1052,7 +1114,7 @@ function NativeChat(
     <ActionPanel
       title={[
         (modelSelection?.model || currentModel.model) === "__cli_default__"
-          ? "CLI Default"
+          ? t("CLI Default")
           : modelSelection?.model || currentModel.model,
         modelSelection?.effort ?? currentModel.effort,
       ]
@@ -1061,7 +1123,7 @@ function NativeChat(
     >
       {!ready && error ? (
         <Action
-          title="Reconnect"
+          title={t("Reconnect")}
           icon={Icon.ArrowClockwise}
           onAction={reconnect}
         />

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { accessSync, constants, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, join, win32 } from "node:path";
 import { envValue, executableEnv, expandHome } from "./executable";
 import type { CliProviderId } from "./cli-protocols";
 
@@ -49,6 +49,69 @@ async function lookup(name: string, env: NodeJS.ProcessEnv): Promise<string[]> {
   );
 }
 
+/** Installed-app metadata is evidence of an install, not evidence of CLI sign-in. */
+export function workBuddyRootsFromMetadata(value: unknown): string[] {
+  const roots = new Set<string>();
+  const rows = Array.isArray(value) ? value : [value];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const entry = row as Record<string, unknown>;
+    const addExecutable = (input: unknown) => {
+      if (typeof input !== "string") return;
+      const file = input
+        .trim()
+        .replace(/,\s*-?\d+$/, "")
+        .replace(/^"(.*)"$/, "$1");
+      if (
+        win32.isAbsolute(file) &&
+        /^workbuddy(?:[ -]?ai)?\.exe$/i.test(win32.basename(file))
+      )
+        roots.add(win32.dirname(file));
+    };
+    addExecutable(entry.processPath);
+    if (
+      typeof entry.displayName !== "string" ||
+      !/^workbuddy(?:[ -]?ai)?(?:\s|$)/i.test(entry.displayName)
+    )
+      continue;
+    if (typeof entry.installLocation === "string") {
+      const root = entry.installLocation.trim().replace(/^"(.*)"$/, "$1");
+      if (win32.isAbsolute(root)) roots.add(root);
+    }
+    addExecutable(entry.displayIcon);
+  }
+  return [...roots];
+}
+
+async function discoverWorkBuddyRoots(
+  env: NodeJS.ProcessEnv,
+): Promise<string[]> {
+  if (process.platform !== "win32") return [];
+  // Fixed read-only script: do not inspect command lines, user configuration,
+  // credentials, or arbitrary drive contents to locate a custom install.
+  const script = [
+    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+    "$rows = @()",
+    "Get-Process -Name '*WorkBuddy*' -ErrorAction SilentlyContinue | ForEach-Object { $rows += @{ processPath = $_.Path } }",
+    "Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match '^WorkBuddy(?:[ -]?AI)?(?:\\s|$)' } | ForEach-Object { $rows += @{ displayName = $_.DisplayName; installLocation = $_.InstallLocation; displayIcon = $_.DisplayIcon } }",
+    "ConvertTo-Json -InputObject @($rows) -Compress",
+  ].join("\n");
+  return new Promise((resolve) =>
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", script],
+      { env, timeout: 5000, windowsHide: true, maxBuffer: 128 * 1024 },
+      (error, output) => {
+        try {
+          resolve(error ? [] : workBuddyRootsFromMetadata(JSON.parse(output)));
+        } catch {
+          resolve([]);
+        }
+      },
+    ),
+  );
+}
+
 /** Resolve known npm wrappers to Node entrypoints; never send a prompt through cmd.exe. */
 export async function resolveCliExecutable(
   provider: CliProviderId,
@@ -90,8 +153,7 @@ export async function resolveCliExecutable(
       for (const root of [
         join(local, "Programs", "WorkBuddy AI"),
         join(local, "Programs", "WorkBuddy"),
-        "/Applications/WorkBuddy AI.app/Contents",
-        "/Applications/WorkBuddy.app/Contents",
+        ...(await discoverWorkBuddyRoots(env)),
       ])
         candidates.push(
           join(
@@ -103,6 +165,20 @@ export async function resolveCliExecutable(
             "codebuddy",
           ),
         );
+      for (const name of ["WorkBuddy AI.app", "WorkBuddy.app"])
+        for (const root of ["/Applications", join(home, "Applications")])
+          candidates.push(
+            join(
+              root,
+              name,
+              "Contents",
+              "Resources",
+              "app.asar.unpacked",
+              "cli",
+              "bin",
+              "codebuddy",
+            ),
+          );
     }
   }
   for (const candidate of candidates) {

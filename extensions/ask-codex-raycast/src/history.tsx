@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import {
   Action,
   ActionPanel,
@@ -55,7 +56,7 @@ export function useSessionHistory({
     } catch (reason) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Could not continue conversation",
+        title: t("Could not continue conversation"),
         message: messageOf(reason),
       });
     } finally {
@@ -65,23 +66,27 @@ export function useSessionHistory({
   }
 
   return {
-    navigationTitle: "Recent Chats",
-    searchBarPlaceholder: "Select a recent conversation…",
+    navigationTitle: t("Recent Chats"),
+    searchBarPlaceholder: t("Select a recent conversation…"),
     filtering: true,
     isLoading: opening,
     isShowingDetail: false,
     actions: (
       <ActionPanel>
-        <Action title="Back to Chat" icon={Icon.ArrowLeft} onAction={onBack} />
-        <Action title="New Chat" icon={Icon.Plus} onAction={onNew} />
+        <Action
+          title={t("Back to Chat")}
+          icon={Icon.ArrowLeft}
+          onAction={onBack}
+        />
+        <Action title={t("New Chat")} icon={Icon.Plus} onAction={onNew} />
       </ActionPanel>
     ),
     children: (
       <>
         <List.EmptyView
           icon={Icon.Message}
-          title="No recent conversations"
-          description="Go back and enter a question to get started."
+          title={t("No recent conversations")}
+          description={t("Go back and enter a question to get started.")}
         />
         {recent.map((session) => (
           <List.Item
@@ -95,16 +100,20 @@ export function useSessionHistory({
             actions={
               <ActionPanel>
                 <Action
-                  title="Continue Conversation"
+                  title={t("Continue Conversation")}
                   icon={Icon.Message}
                   onAction={() => select(session)}
                 />
                 <Action
-                  title="Back to Chat"
+                  title={t("Back to Chat")}
                   icon={Icon.ArrowLeft}
                   onAction={onBack}
                 />
-                <Action title="New Chat" icon={Icon.Plus} onAction={onNew} />
+                <Action
+                  title={t("New Chat")}
+                  icon={Icon.Plus}
+                  onAction={onNew}
+                />
               </ActionPanel>
             }
           />

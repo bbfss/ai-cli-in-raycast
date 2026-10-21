@@ -1,7 +1,7 @@
+import { t } from "./i18n";
 import {
   Action,
   ActionPanel,
-  Detail,
   Form,
   Icon,
   LocalStorage,
@@ -43,7 +43,7 @@ export function SetupWizard({
   const [models, setModels] = useState<CodexModel[]>([]);
   const [model, setModel] = useState("");
   const [effort, setEffort] = useState("");
-  const [checking, setChecking] = useState(false);
+  const [checking, setChecking] = useState(preferences.autoDetectCli !== false);
   const [checkedAt, setCheckedAt] = useState(0);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -53,8 +53,15 @@ export function SetupWizard({
   const clientRef = useRef<ChatClient | null>(null);
   useEffect(() => {
     mounted.current = true;
+    // Defer startup by one task so React's development mount/cleanup probe
+    // cancels the first timer before a CLI process can be launched.
+    const autoCheck =
+      preferences.autoDetectCli !== false
+        ? setTimeout(() => void checkConnection(), 0)
+        : undefined;
     return () => {
       mounted.current = false;
+      if (autoCheck !== undefined) clearTimeout(autoCheck);
       clientRef.current?.close();
     };
   }, []);
@@ -76,15 +83,18 @@ export function SetupWizard({
       workbuddyPath: preferences.workbuddyPath,
       geminiPath: preferences.geminiPath,
       liveSearch: preferences.liveSearch ?? true,
+      autoDetectCli: preferences.autoDetectCli,
     });
     clientRef.current = client;
     try {
       await client.connect();
+      if (!mounted.current) return;
       await client.checkAuthentication();
+      if (!mounted.current) return;
       const catalog = await client.listModels();
       if (!catalog.length)
         throw new Error(
-          "No models returned. Check your CLI configuration and try again.",
+          t("No models returned. Check your CLI configuration and try again."),
         );
       if (!mounted.current) return;
       setModels(catalog);
@@ -114,7 +124,7 @@ export function SetupWizard({
     if (!checkedAt || !validSelection(models, { model, effort })) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Choose a model and effort level to continue",
+        title: t("Choose a model and effort level to continue"),
       });
       return;
     }
@@ -134,7 +144,7 @@ export function SetupWizard({
     } catch (reason) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Could not save settings",
+        title: t("Could not save settings"),
         message: messageOf(reason),
       });
     } finally {
@@ -145,40 +155,26 @@ export function SetupWizard({
 
   const preferencesAction = (
     <Action
-      title="CLI Path and Permissions"
+      title={t("CLI Path and Permissions")}
       icon={Icon.Gear}
       onAction={openExtensionPreferences}
     />
   );
   const label = providerCapabilities(provider).label;
-  const title = `Set Up ${label} in Raycast`;
+  const title = t("Set Up {provider} in Raycast", { provider: label });
   if (step === 1)
     return (
-      <Detail
+      <Form
         navigationTitle={title}
         isLoading={checking}
-        markdown={[
-          `## ${label} in Raycast`,
-          "**1 of 2 · Connect your CLI**",
-          provider === "codex"
-            ? "Install Codex CLI and run `codex login` first."
-            : `Install ${label} CLI and sign in from your terminal first.`,
-          provider === "codex"
-            ? "Check the local connection, sign-in status, and available models. No prompt is sent; model access is confirmed with your first message."
-            : "Find the local CLI and its model choices. No prompt is sent; sign-in and model access are confirmed with your first message.",
-          checking
-            ? "Checking Connection…"
-            : error
-              ? `**Connection check failed**\n\n${error.replace(/[<>]/g, "")}`
-              : "Press Enter to connect. Your chats and model choice stay with this CLI.",
-          "*AI in Raycast · Enable or disable each CLI command in Raycast Settings → Extensions.*",
-        ].join("\n\n")}
         actions={
           <ActionPanel>
-            <Action
-              title={checking ? "Checking Connection…" : "Check CLI Connection"}
+            <Action.SubmitForm
+              title={
+                checking ? t("Checking Connection…") : t("Check CLI Connection")
+              }
               icon={Icon.Link}
-              onAction={checkConnection}
+              onSubmit={checkConnection}
             />
             <ProviderMenu
               providers={PROVIDERS}
@@ -190,13 +186,28 @@ export function SetupWizard({
             {preferencesAction}
             {provider === "codex" && (
               <Action.OpenInBrowser
-                title="Install Codex CLI"
+                title={t("Install Codex CLI")}
                 url="https://github.com/openai/codex#installation"
               />
             )}
           </ActionPanel>
         }
-      />
+      >
+        <Form.Description
+          title={t("Connect CLI")}
+          text={
+            provider === "codex"
+              ? t("Check the CLI and available models. No message is sent.")
+              : t(
+                  "Check the CLI and available models. Sign-in is verified with your first message.",
+                )
+          }
+        />
+        {checking && <Form.Description text={t("Checking Connection…")} />}
+        {error && (
+          <Form.Description title={t("Connection check failed")} text={error} />
+        )}
+      </Form>
     );
   const selected = models.find((entry) => entry.model === model);
   return (
@@ -206,11 +217,11 @@ export function SetupWizard({
       actions={
         <ActionPanel>
           <Action.SubmitForm
-            title="Save and Start Chatting"
+            title={t("Save and Start Chatting")}
             onSubmit={finish}
           />
           <Action
-            title="Check Connection Again"
+            title={t("Check Connection Again")}
             onAction={() => {
               if (!savingRef.current) {
                 setCheckedAt(0);
@@ -222,16 +233,16 @@ export function SetupWizard({
       }
     >
       <Form.Description
-        title="2 of 2 · Default Model"
+        title={t("Default Model")}
         text={
           provider === "codex"
-            ? "CLI connected. Choose a model and effort level. You can change them later in Actions."
-            : "Choose a model, or CLI Default to use the CLI's own choice. Sign-in and model access have not been verified yet."
+            ? t("Choose the model for new messages.")
+            : t("Choose a model. CLI Default uses the CLI's own choice.")
         }
       />
       <Form.Dropdown
         id="model"
-        title="Model"
+        title={t("Model")}
         value={model}
         onChange={(value) => {
           if (savingRef.current) return;
@@ -239,36 +250,34 @@ export function SetupWizard({
           setEffort("");
         }}
       >
-        <Form.Dropdown.Item value="" title="Choose a model" />
+        <Form.Dropdown.Item value="" title={t("Choose a model")} />
         {models.map((entry) => (
           <Form.Dropdown.Item
             key={entry.model}
             value={entry.model}
-            title={entry.displayName || entry.model}
+            title={
+              entry.model === "__cli_default__"
+                ? t("CLI Default")
+                : entry.displayName || entry.model
+            }
           />
         ))}
       </Form.Dropdown>
-      {selected &&
-        (selected.efforts.length ? (
-          <Form.Dropdown
-            id="effort"
-            title="Effort Level"
-            value={effort}
-            onChange={(value) => {
-              if (!savingRef.current) setEffort(value);
-            }}
-          >
-            <Form.Dropdown.Item value="" title="Choose an effort level" />
-            {selected.efforts.map((value) => (
-              <Form.Dropdown.Item key={value} value={value} title={value} />
-            ))}
-          </Form.Dropdown>
-        ) : (
-          <Form.Description
-            title="Effort Level"
-            text="This model does not expose an adjustable effort level."
-          />
-        ))}
+      {selected && selected.efforts.length > 0 && (
+        <Form.Dropdown
+          id="effort"
+          title={t("Effort Level")}
+          value={effort}
+          onChange={(value) => {
+            if (!savingRef.current) setEffort(value);
+          }}
+        >
+          <Form.Dropdown.Item value="" title={t("Choose an effort level")} />
+          {selected.efforts.map((value) => (
+            <Form.Dropdown.Item key={value} value={value} title={value} />
+          ))}
+        </Form.Dropdown>
+      )}
     </Form>
   );
 }

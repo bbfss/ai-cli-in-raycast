@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { Action, ActionPanel, Icon } from "@raycast/api";
 
 export type ProviderMenuItem = {
@@ -25,7 +26,11 @@ export function ProviderMenu({
 
   return (
     <ActionPanel.Submenu
-      title={current ? `Provider: ${current.title}` : "Choose Provider"}
+      title={
+        current
+          ? t("Provider: {provider}", { provider: current.title })
+          : t("Choose Provider")
+      }
       icon={Icon.Terminal}
       shortcut={
         shortcuts
@@ -36,7 +41,7 @@ export function ProviderMenu({
           : undefined
       }
     >
-      <ActionPanel.Section title="Local AI CLI">
+      <ActionPanel.Section title={t("Local AI CLI")}>
         {providers.map((provider) => (
           <Action
             key={provider.id}

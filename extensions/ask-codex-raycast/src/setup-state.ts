@@ -11,6 +11,7 @@ export type ConnectionPreferences = {
   workingDirectory?: string;
   sandboxMode?: string;
   liveSearch?: boolean;
+  autoDetectCli?: boolean;
 };
 export type Setup = {
   version: 2;
@@ -23,6 +24,9 @@ export function connectionSignature(
   preferences: ConnectionPreferences,
   provider = "codex",
 ): string {
+  // Preserve existing signatures with automatic discovery enabled; disabling it
+  // invalidates only connection checks, never chat history or model preference.
+  const detection = preferences.autoDetectCli === false ? ["manual-paths"] : [];
   if (provider !== "codex")
     return JSON.stringify([
       provider,
@@ -37,12 +41,14 @@ export function connectionSignature(
       ).trim(),
       preferences.workingDirectory?.trim() || "",
       preferences.sandboxMode || "read-only",
+      ...detection,
     ]);
   return JSON.stringify([
     preferences.codexPath?.trim() || "",
     preferences.workingDirectory?.trim() || "",
     preferences.sandboxMode || "read-only",
     preferences.liveSearch ?? true,
+    ...detection,
   ]);
 }
 

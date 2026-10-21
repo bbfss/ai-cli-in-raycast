@@ -1,6 +1,17 @@
-# AI in Raycast
+# AI CLI in Raycast
 
-## [Multi-CLI Suite] - {PR_MERGE_DATE}
+## [CLI Launcher, Settings and Localization] - 2026-10-21
+
+- Rename the suite AI CLI in Raycast and add a native launcher and CLI Settings, for eight independently enabled commands including the six CLI chats.
+- Add English, simplified Chinese and traditional Chinese interface preferences; retain English static Raycast metadata and preserve original conversation content and CLI diagnostics.
+- Add default-on automatic installation detection, explicit-path priority and manual-path mode. Report discovery separately from authentication.
+- Use native List/Metadata settings and Form setup. Automatically check the local connection/catalog without inference, then require a valid model choice; guard startup against duplicate development mounts and unmount races.
+- Remove onboarding and empty-chat clutter while preserving full-width conversations and the floating composer.
+- Apply a Gemini-authored SVG logo, mechanically rendered to `suite-icon.png`, across all eight commands.
+- Verify build, TypeScript, lint and 151 tests; verify the Chinese launcher and WorkBuddy navigation to model selection without claiming authenticated inference.
+- Keep the withdrawn Store applications closed; no new submission.
+
+## [Multi-CLI Suite Development] - 2026-10-21
 
 - Add six independent commands under AI in Raycast, each with native Raycast enable/disable controls and isolated history, drafts and model settings.
 - Add Qoder, Qoder CN, WorkBuddy and Gemini adapters with exact native session mappings.

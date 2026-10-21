@@ -1,9 +1,9 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "ask-codex-raycast",
-  "title": "AI in Raycast",
-  "description": "Continue conversations with installed local AI CLIs inside Raycast, with isolated sessions and native model controls.",
-  "icon": "command-icon.png",
+  "title": "AI CLI in Raycast",
+  "description": "A suite of native Raycast chats for your installed AI CLIs, with independent commands, settings, and sessions.",
+  "icon": "suite-icon.png",
   "author": "bbfss",
   "license": "MIT",
   "platforms": [
@@ -16,9 +16,28 @@
   ],
   "commands": [
     {
+      "name": "cli-hub",
+      "title": "AI CLI in Raycast",
+      "subtitle": "Local AI CLIs",
+      "description": "Open a local AI CLI or manage its settings from one native Raycast launcher.",
+      "mode": "view",
+      "keywords": [
+        "ai",
+        "cli",
+        "chat",
+        "codex",
+        "antigravity",
+        "qoder",
+        "workbuddy",
+        "gemini"
+      ],
+      "disabledByDefault": false,
+      "icon": "suite-icon.png"
+    },
+    {
       "name": "index",
       "title": "Codex in Raycast",
-      "subtitle": "AI in Raycast",
+      "subtitle": "AI CLI in Raycast",
       "description": "Chat with your local Codex CLI, with its own saved conversations and model choice.",
       "mode": "view",
       "keywords": [
@@ -36,13 +55,13 @@
           "required": false
         }
       ],
-      "icon": "command-icon.png",
+      "icon": "suite-icon.png",
       "disabledByDefault": false
     },
     {
       "name": "antigravity",
       "title": "Antigravity in Raycast",
-      "subtitle": "AI in Raycast",
+      "subtitle": "AI CLI in Raycast",
       "description": "Chat with your local Antigravity CLI, with its own saved conversations and model choice.",
       "mode": "view",
       "keywords": [
@@ -60,13 +79,13 @@
           "required": false
         }
       ],
-      "icon": "command-icon.png",
+      "icon": "suite-icon.png",
       "disabledByDefault": false
     },
     {
       "name": "qoder",
       "title": "Qoder in Raycast",
-      "subtitle": "AI in Raycast",
+      "subtitle": "AI CLI in Raycast",
       "description": "Chat with your local Qoder CLI, with its own saved conversations and model choice.",
       "mode": "view",
       "keywords": [
@@ -83,13 +102,13 @@
           "required": false
         }
       ],
-      "icon": "command-icon.png",
+      "icon": "suite-icon.png",
       "disabledByDefault": false
     },
     {
       "name": "qoder-cn",
       "title": "Qoder CN in Raycast",
-      "subtitle": "AI in Raycast",
+      "subtitle": "AI CLI in Raycast",
       "description": "Chat with your local Qoder CN CLI, with its own saved conversations and model choice.",
       "mode": "view",
       "keywords": [
@@ -107,13 +126,13 @@
           "required": false
         }
       ],
-      "icon": "command-icon.png",
+      "icon": "suite-icon.png",
       "disabledByDefault": false
     },
     {
       "name": "workbuddy",
       "title": "WorkBuddy in Raycast",
-      "subtitle": "AI in Raycast",
+      "subtitle": "AI CLI in Raycast",
       "description": "Chat with your local WorkBuddy CLI, with its own saved conversations and model choice.",
       "mode": "view",
       "keywords": [
@@ -131,13 +150,13 @@
           "required": false
         }
       ],
-      "icon": "command-icon.png",
+      "icon": "suite-icon.png",
       "disabledByDefault": false
     },
     {
       "name": "gemini",
       "title": "Gemini in Raycast",
-      "subtitle": "AI in Raycast",
+      "subtitle": "AI CLI in Raycast",
       "description": "Chat with your local Gemini CLI, with its own saved conversations and model choice.",
       "mode": "view",
       "keywords": [
@@ -154,11 +173,58 @@
           "required": false
         }
       ],
-      "icon": "command-icon.png",
+      "icon": "suite-icon.png",
       "disabledByDefault": false
+    },
+    {
+      "name": "cli-settings",
+      "title": "CLI Settings",
+      "subtitle": "AI CLI in Raycast",
+      "description": "Detect installed AI CLIs and manage language, paths, and local CLI preferences.",
+      "mode": "view",
+      "keywords": [
+        "ai",
+        "cli",
+        "detect",
+        "settings",
+        "language"
+      ],
+      "disabledByDefault": false,
+      "icon": "suite-icon.png"
     }
   ],
   "preferences": [
+    {
+      "name": "uiLanguage",
+      "type": "dropdown",
+      "title": "Interface Language / 界面语言",
+      "description": "Language of extension screens. Raycast system controls and CLI output follow their own language settings.",
+      "required": false,
+      "default": "en",
+      "data": [
+        {
+          "title": "English",
+          "value": "en"
+        },
+        {
+          "title": "简体中文",
+          "value": "zh-CN"
+        },
+        {
+          "title": "繁體中文",
+          "value": "zh-TW"
+        }
+      ]
+    },
+    {
+      "name": "autoDetectCli",
+      "type": "checkbox",
+      "title": "CLI Detection / CLI 自动检测",
+      "label": "Automatically find installed CLIs",
+      "description": "Check PATH and known installation locations. Manual paths take priority. Turn off to require explicit CLI paths.",
+      "required": false,
+      "default": true
+    },
     {
       "name": "liveSearch",
       "type": "checkbox",

@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ChatMessage } from "./conversations";
@@ -15,26 +16,26 @@ export function conversationMarkdown(
       message.role === "assistant"
         ? assistant
         : message.kind === "steer"
-          ? "You · Additional Instructions"
-          : "You";
+          ? t("You · Additional Instructions")
+          : t("You");
     const avatar =
       message.role === "assistant"
         ? assistant === "Codex"
-          ? "command-icon.png"
+          ? "suite-icon.png"
           : "cli-avatar.svg"
         : "user-avatar.svg";
     const avatarURL = pathToFileURL(join(assetsPath, avatar));
     avatarURL.search = "raycast-width=22&raycast-height=22";
-    const body = renderMarkdown(message.content) || "Thinking…";
+    const body = renderMarkdown(message.content) || t("Thinking…");
     return `![${speaker}](<${avatarURL.href}>) **${speaker}**\n\n${body}`;
   });
   const notice = error || status;
   const header = notice
-    ? `${error ? "**Connection Notice** · " : ""}${notice.replace(/\r?\n/g, " ")}\n\n`
+    ? `${error ? `**${t("Connection Notice")}** · ` : ""}${notice.replace(/\r?\n/g, " ")}\n\n`
     : "";
   return (
     header +
     (cards.join("\n\n---\n\n") ||
-      `## ${assistant} in Raycast\n\nYour local CLI, ready for a conversation.\n\nPress Enter to open the message composer, enter your message, and press Enter to send.\n\n| Shortcut | Action |\n| --- | --- |\n| ${process.platform === "darwin" ? "⌘" : "Ctrl"}+M | Choose a model |\n| ${process.platform === "darwin" ? "⌘" : "Ctrl"}+P | Switch CLI |\n\n*Part of AI in Raycast · This CLI has its own chats, drafts, and model choice.*`)
+      `### ${assistant} in Raycast\n\n${t("Press Enter to open the message composer.")}`)
   );
 }

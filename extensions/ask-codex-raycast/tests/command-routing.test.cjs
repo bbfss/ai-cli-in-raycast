@@ -110,10 +110,10 @@ function commandHost(t, commandName, launch = {}) {
   };
 }
 
-test('manifest exposes exactly six independent CLI root commands', () => {
-  assert.equal(manifest.title, 'AI in Raycast');
-  assert.deepEqual(manifest.commands.map(command => command.name).sort(), Object.keys(commands).sort());
-  for (const command of manifest.commands) {
+test('manifest exposes six isolated chats alongside the native hub and settings', () => {
+  assert.equal(manifest.title, 'AI CLI in Raycast');
+  assert.deepEqual(manifest.commands.filter(command=>!['cli-settings','cli-hub'].includes(command.name)).map(command => command.name).sort(), Object.keys(commands).sort());
+  for (const command of manifest.commands.filter(command=>!['cli-settings','cli-hub'].includes(command.name))) {
     assert.equal(command.title, commands[command.name].title);
     assert.equal(command.mode, 'view');
   }
@@ -171,7 +171,7 @@ test('host rejection of a disabled command is reported and preserves the current
   assert.equal(host.toasts[0].style, 'failure');
   assert.equal(host.toasts[0].title, 'Could Not Switch CLI');
   assert.match(host.toasts[0].message, /disabled/);
-  assert.match(host.toasts[0].message, /Raycast Settings.*Extensions.*AI in Raycast/);
+  assert.match(host.toasts[0].message, /Raycast Settings.*Extensions.*AI CLI in Raycast/);
   assert.equal(host.root().props.provider, 'codex');
   assert.deepEqual(host.writes, []);
 });

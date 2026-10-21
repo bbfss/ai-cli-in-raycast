@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { Action, ActionPanel, Icon, showToast, Toast } from "@raycast/api";
 import { useRef, useState } from "react";
 
@@ -17,7 +18,7 @@ export function MessageComposer(props: {
   const preview = message.replace(/\s+/g, " ").slice(0, 90);
   return (
     <ActionPanel.Submenu
-      title={props.busy ? "Add Instructions" : "Enter Message"}
+      title={props.busy ? t("Add Instructions") : t("Enter Message")}
       icon={props.busy ? Icon.Plus : Icon.Pencil}
       shortcut={{ modifiers: [], key: "return" }}
       filtering={false}
@@ -48,24 +49,24 @@ export function MessageComposer(props: {
       <ActionPanel.Section
         title={
           preview
-            ? `Pending · ${preview}`
-            : "Type a message, press Enter to send"
+            ? t("Pending · {preview}", { preview })
+            : t("Type a message, press Enter to send")
         }
       >
         <Action
           title={
             restored
-              ? "Send Saved Draft"
+              ? t("Send Saved Draft")
               : props.busy
-                ? "Send Instructions"
-                : "Send Message"
+                ? t("Send Instructions")
+                : t("Send Message")
           }
           icon={Icon.ArrowRight}
           onAction={async () => {
             if (!message.trim()) {
               await showToast({
                 style: Toast.Style.Failure,
-                title: "Enter a message in the input field first",
+                title: t("Enter a message in the input field first"),
               });
               return;
             }
@@ -86,7 +87,7 @@ export function MessageComposer(props: {
       <ActionPanel.Section>
         {props.draft.trim() && (
           <Action
-            title="Clear Draft"
+            title={t("Clear Draft")}
             icon={Icon.Eraser}
             onAction={() => {
               editRevision.current += 1;
@@ -98,7 +99,7 @@ export function MessageComposer(props: {
         )}
         {restored && (
           <Action.CopyToClipboard
-            title="Copy Draft to Continue Editing"
+            title={t("Copy Draft to Continue Editing")}
             content={props.draft}
           />
         )}

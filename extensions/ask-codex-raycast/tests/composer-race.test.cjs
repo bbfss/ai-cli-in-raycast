@@ -1,3 +1,4 @@
+require("./load.cjs");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -37,6 +38,7 @@ function composer(onSend, savedDraft = "") {
     if (id === "react") return react;
     if (id === "react/jsx-runtime") return { jsx, jsxs: jsx };
     if (id === "@raycast/api") return api;
+    if (id === "./i18n") return require("../src/i18n.ts");
     throw new Error(`Unexpected component dependency: ${id}`);
   };
   loaded._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {

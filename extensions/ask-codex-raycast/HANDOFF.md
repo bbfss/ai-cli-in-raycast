@@ -1,4 +1,4 @@
-# AI in Raycast — development handoff (2026-10-21)
+# AI CLI in Raycast — development handoff (2026-10-21)
 
 ## Start here
 
@@ -10,7 +10,7 @@ Extension directory: `extensions/ask-codex-raycast`
 
 **Do not reopen withdrawn Store PRs or submit a new Store application.** The user explicitly reaffirmed this constraint. Previous PRs #31456 and #32387 are closed, not publication evidence.
 
-The latest user correction is a **suite of independent commands**, not only one chat command with a provider dropdown. The extension is **AI in Raycast**; its six root commands are **Codex in Raycast**, **Antigravity in Raycast**, **Qoder in Raycast**, **Qoder CN in Raycast**, **WorkBuddy in Raycast**, and **Gemini in Raycast**. Each command can be enabled/disabled with Raycast's native checkbox in Settings → Extensions → AI in Raycast. The original extension ID `ask-codex-raycast` and Codex command ID `index` are preserved.
+The extension is **AI CLI in Raycast**, a suite of eight independent native commands: the **AI CLI in Raycast** launcher (`cli-hub`), **Codex in Raycast** (`index`), **Antigravity in Raycast**, **Qoder in Raycast**, **Qoder CN in Raycast**, **WorkBuddy in Raycast**, **Gemini in Raycast**, and **CLI Settings** (`cli-settings`). Each has Raycast's native enabled checkbox in Settings → Extensions → AI CLI in Raycast. All eight use `suite-icon.png`. Preserve the original extension ID `ask-codex-raycast` and Codex command ID `index` so installed data and deep links continue to work.
 
 ## Implemented
 
@@ -22,11 +22,15 @@ The latest user correction is a **suite of independent commands**, not only one 
 - `cli-executable.ts`: native/known npm Node entrypoint discovery without shell prompt interpolation. Handles Windows extensionless npm dispatchers as well as `.cmd` wrappers. Custom WorkBuddy bundles use a process-only bundle selector. Node must be available on PATH.
 - `executable.ts`: preserve all environment settings while handling mixed-case Windows `Path`/`AppData` keys without duplicate PATH entries. Antigravity auto-detection includes its standard LocalAppData install.
 - `session-storage.ts`: history/drafts/model/setup isolated by provider, original Codex keys preserved. Mapping keys retain the original AGY format.
-- Native full-width Detail and floating Enter composer remain. Gemini Flash design input informed provider-specific page titles, calm empty states and concise two-step setup. Setup distinguishes executable/catalog availability from authenticated inference. CLI Default is an explicit choice where there is no reliable model catalog.
+- `cli-hub.tsx` launches independent CLI commands without forwarding prompts or sessions. `cli-settings.tsx` uses a native List and Metadata inspector for discovered paths and status. Detection results mean file discovery, not authenticated inference.
+- Automatic detection defaults to true. Explicit per-CLI paths take priority, including reporting a bad configured path instead of falling back. With detection off, every CLI needs an explicit path. The setting is respected by both discovery screens and chat client creation.
+- Opening CLI Settings from chat waits for conversation, draft, and model saves; a running reply must be stopped first. Failed saves or unmounts do not launch a different command.
+- `i18n.ts` provides English, simplified Chinese and traditional Chinese, with English fallback and literal placeholder substitution. The user's explicit localization request supersedes the earlier US-English-only development guidance. Static Raycast command/preference metadata stays English; model IDs, diagnostics, prompts and AI responses are not translated.
+- Native full-width Detail and floating Enter composer remain. Empty chat is a small heading and one Enter instruction. Two-stage setup uses native Forms: with detection enabled, the first mount automatically checks connection/catalog without sending an inference prompt; the next form requires an explicit valid model and supported effort choice. A saved valid choice is preserved. Manual mode retains an explicit check action. Deferred startup and unmount guards prevent duplicate development mount launches and work after leaving setup. CLI Default is an explicit option where no reliable catalog exists.
 
 ## Validation on Windows
 
-Raycast 2.8.2; Node 24.21.0. Build, standalone TypeScript, lint and **115 tests passed**. Tests execute production code, including real Node fixture subprocesses, cancellation/process cleanup, persisted mapping races, invalid identity, exit-zero failures, command routing, disabled launch errors and UI callback races.
+Raycast 2.8.2; Node 24.21.0. Build, standalone TypeScript, lint and **151 tests passed**. Tests execute production code, including real Node fixture subprocesses, cancellation/process cleanup, persisted mapping races, invalid identity, exit-zero failures, command routing, disabled launch errors, UI callback races, installation detection, localization and automatic-setup mount cleanup.
 
 | Provider | Real adapter test | Native Raycast test |
 | --- | --- | --- |
@@ -34,14 +38,16 @@ Raycast 2.8.2; Node 24.21.0. Build, standalone TypeScript, lint and **115 tests 
 | Antigravity 1.2.16 (`gemini-3.8-flash-high`) | Remember → close/recreate → exact resume → cancel → continue passed again after lifecycle changes | Setup, send, isolated history, switch away/back, correct remembered word, Stop Response and no remaining agy process passed |
 | Qoder CN 1.1.74 (`Fast`) | Actual inference, restart/resume, cancel/continue passed; a separate direct probe canceled at first text delta and then recovered the original word | Independent command, connection/model setup and response passed |
 | Qoder international | Not installed/independently tested here | Entry and routing available; do not claim native inference |
-| WorkBuddy AI embedded CLI | Launch/version/model help work; actual result is authentication-required even with process exit 0 | Custom local CLI path configured; authenticated inference remains blocked |
+| WorkBuddy AI embedded CLI | Launch/version/model help work; actual result is authentication-required even with process exit 0 | Custom local CLI path configured; latest Chinese hub launch automatically reached model selection. This does not verify sign-in; authenticated inference remains blocked |
 | Gemini CLI 0.65.0 | Isolated workspace-local package launches; account returns `UNSUPPORTED_CLIENT`, recommending Antigravity. Also requires explicit workspace trust in this test directory | Local entrypoint path configured; inference/resume not verified |
 
-Native Settings showed all six independent command checkboxes. Temporarily disabled Qoder: attempting to switch from Qoder CN produced `No enabled command`, and the original conversation stayed intact. Re-enabled Qoder afterward. WorkBuddy's custom installation path and Gemini's workspace-local Node entrypoint were saved through the native preferences UI, not database edits.
+Native Settings previously verified all six independent CLI checkboxes. Temporarily disabled Qoder: attempting to switch from Qoder CN produced `No enabled command`, and the original conversation stayed intact. Re-enabled Qoder afterward. The suite now has the launcher and settings commands as well. WorkBuddy's custom installation path and Gemini's workspace-local Node entrypoint were saved through native preferences, not database edits. The latest native check displayed the Chinese hub and all six discovery states, then launched WorkBuddy from the hub into automatic setup and model selection.
+
+Native auto-detection was also toggled off: four CLIs without explicit paths displayed Path Required; WorkBuddy and Gemini retained their configured-path results. Detection was restored to enabled and the launcher returned to five Found results and international Qoder Not Found. Simplified Chinese remains selected. Canceling a detection scan suppresses stale UI results; bounded operating-system lookups may still finish after cancellation.
 
 **Keyboard limitation:** Windows UI Automation successfully invoked send/saved-draft actions and verified results. Automated SendKeys Enter was unreliable (menu focus/closure); do not claim a complete physical Enter-to-send keyboard acceptance test. No conclusion that this is a product defect has been established. Saved drafts survived these attempts.
 
-No Windows or macOS Store submission was made. Previous macOS baseline had 43 tests; the expanded suite needs a fresh macOS run. Existing Store metadata/brand icons still reflect earlier Codex branding and need review before any future publication.
+No Windows or macOS Store submission was made. Previous macOS baseline had 43 tests; the expanded suite needs a fresh macOS run. The development branding and command icons have been replaced, but no future Store policy or publication review is implied by these local changes.
 
 ## Permissions and authentication boundaries
 
@@ -55,7 +61,8 @@ The user explicitly requested Magpie 国模之光 and Gemini Flash 3.8 assistanc
 
 - Magpie `group/never-stuck` completed a real backend review this round. It emphasized durable identity before success, close/cancel cleanup, and catalog-vs-auth distinction. The requested routing group is recorded; do not infer which underlying model answered from the group name.
 - Magpie's `opencode-zen/gemini-3.8-flash` failed with HTTP 402 (insufficient account funds). No top-up or account change was attempted.
-- After the user's visual-design request, native Antigravity `gemini-3.8-flash-high` completed a real UI review. Only selected source/constraints were supplied. Adopted page hierarchy and setup copy; rejected invented shortcuts, namespace changes that would lose old history, and unsupported claims. Do not claim this successful Gemini call used Magpie.
+- Native Antigravity `gemini-3.8-flash-high` completed real UI reviews and generated the adopted SVG logo design. Resvg mechanically rendered that SVG to the delivered PNG assets. The latest UI adopts native List/Metadata/Form components and removes tutorial/shortcut clutter. Do not claim these successful Gemini calls used Magpie or produced a raster image directly.
+- The user currently has no usable Claude access. No Claude contribution is claimed. Magpie's available catalog offered no image-output route for this task; two browser Gemini image attempts contained a visible checkerboard background and were not adopted. The delivered logo comes from the Gemini-authored SVG, not those attempts.
 - Read Magpie source at `ba319a7587923fc7a4ea3859658244d591261a59`; detailed evidence and pinned links are in [MAGPIE_RESEARCH.md](MAGPIE_RESEARCH.md). Its AGY usage-log reader is not a live chat adapter. Gateway cancellation propagates into retry waits; requested route and actual model/account identity are distinct. No Magpie authentication implementation was copied.
 - Gemini schema was cross-checked against official google-gemini/gemini-cli source at `c1740d29301a73a47dc3501c1aecc7eb00c0ee58` (`docs/cli/headless.md`, output event types, config flags, exact UUID resume).
 
@@ -64,7 +71,7 @@ The user explicitly requested Magpie 国模之光 and Gemini Flash 3.8 assistanc
 1. Resolve WorkBuddy native CLI sign-in and Gemini account eligibility through their supported user flows, then run real inference/resume/cancel tests. International Qoder also needs its own installed/signed-in test.
 2. Finish manual physical Enter keyboard acceptance, especially Windows focus behavior; verify a fresh macOS build.
 3. Expand provider catalogs only from installed CLI help/official protocol evidence. Do not invent model IDs or assume a desktop login grants headless access.
-4. Before any future user-authorized Store submission, review suite branding/screenshots and current Store requirements. No publication is currently authorized.
+4. Before any future user-authorized Store submission, review current policies, localized UI, branding and screenshots. No publication is currently authorized; do not reopen the withdrawn applications.
 
 ## Commands
 
@@ -77,4 +84,4 @@ npm run lint
 npm run dev
 ```
 
-Build before standalone types so Raycast generates preference/argument definitions. UI remains US English per upstream repository instructions; responses may use the user's requested language. Test traces, private collaboration responses and screenshots remain outside the repository in the task workspace, with a concise user-facing report under `outputs/`.
+Build before standalone types so Raycast generates preference/argument definitions. Localized extension UI was explicitly requested by the user; host metadata remains English and future Store compatibility has not been asserted. Test traces, private collaboration responses and screenshots remain outside the repository in the task workspace, with user-facing reports and logo deliverables under `outputs/`.

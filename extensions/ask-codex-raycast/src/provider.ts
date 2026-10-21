@@ -55,39 +55,61 @@ export function createProviderClient(
     qoderCnPath?: string;
     workbuddyPath?: string;
     geminiPath?: string;
+    autoDetectCli?: boolean;
     liveSearch: boolean;
   },
 ): ChatClient {
-  if (provider === "codex") return new CodexAppServer(options);
+  const explicit = {
+    codex: options.codexPath,
+    antigravity: options.agyPath,
+    qoder: options.qoderPath,
+    "qoder-cn": options.qoderCnPath,
+    workbuddy: options.workbuddyPath,
+    gemini: options.geminiPath,
+  }[provider];
+  const guardDetection = (client: ChatClient) => {
+    if (options.autoDetectCli === false && !explicit?.trim())
+      client.connect = async () => {
+        throw new Error(
+          `Automatic CLI detection is off. Set the ${PROVIDER_LABELS[provider]} CLI path in preferences.`,
+        );
+      };
+    return client;
+  };
+  if (provider === "codex") return guardDetection(new CodexAppServer(options));
   if (provider !== "antigravity")
-    return new CliChatClient({
+    return guardDetection(
+      new CliChatClient({
+        ...options,
+        provider,
+        cliPath: {
+          qoder: options.qoderPath,
+          "qoder-cn": options.qoderCnPath,
+          workbuddy: options.workbuddyPath,
+          gemini: options.geminiPath,
+        }[provider],
+        sessions: {
+          get: (id) =>
+            LocalStorage.getItem<string>(
+              `ai-in-raycast.${provider}-session.${id}`,
+            ),
+          set: (id, remote) =>
+            LocalStorage.setItem(
+              `ai-in-raycast.${provider}-session.${id}`,
+              remote,
+            ),
+        },
+      }),
+    );
+  return guardDetection(
+    new AntigravityClient({
       ...options,
-      provider,
-      cliPath: {
-        qoder: options.qoderPath,
-        "qoder-cn": options.qoderCnPath,
-        workbuddy: options.workbuddyPath,
-        gemini: options.geminiPath,
-      }[provider],
       sessions: {
         get: (id) =>
-          LocalStorage.getItem<string>(
-            `ai-in-raycast.${provider}-session.${id}`,
-          ),
+          LocalStorage.getItem<string>(`ai-in-raycast.agy-session.${id}`),
         set: (id, remote) =>
-          LocalStorage.setItem(
-            `ai-in-raycast.${provider}-session.${id}`,
-            remote,
-          ),
+          LocalStorage.setItem(`ai-in-raycast.agy-session.${id}`, remote),
       },
-    });
-  return new AntigravityClient({
-    ...options,
-    sessions: {
-      get: (id) =>
-        LocalStorage.getItem<string>(`ai-in-raycast.agy-session.${id}`),
-      set: (id, remote) =>
-        LocalStorage.setItem(`ai-in-raycast.agy-session.${id}`, remote),
-    },
-  });
+    }),
+  );
 }

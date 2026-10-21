@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { Action, ActionPanel, Icon } from "@raycast/api";
 import type { CodexModel, ModelSelection } from "./codex";
 
@@ -21,10 +22,10 @@ function RefreshModels(props: ModelMenuProps) {
     <Action
       title={
         props.error
-          ? "Reload Model List"
+          ? t("Reload Model List")
           : props.ready
-            ? "Refresh Model List"
-            : "Waiting for Connection"
+            ? t("Refresh Model List")
+            : t("Waiting for Connection")
       }
       icon={Icon.ArrowClockwise}
       onAction={props.onRefresh}
@@ -40,7 +41,12 @@ export function ModelMenu(props: ModelMenuProps) {
   const selected = props.selection || props.current;
   return (
     <ActionPanel.Submenu
-      title={`Model: ${selected.model === "__cli_default__" ? "CLI Default" : selected.model || "Auto"}`}
+      title={t("Model: {model}", {
+        model:
+          selected.model === "__cli_default__"
+            ? t("CLI Default")
+            : selected.model || t("Auto"),
+      })}
       icon={Icon.ComputerChip}
       shortcut={
         props.shortcuts === false
@@ -55,16 +61,20 @@ export function ModelMenu(props: ModelMenuProps) {
     >
       {props.allowCurrent !== false && (
         <Action
-          title="Use Current Conversation Model"
+          title={t("Use Current Conversation Model")}
           icon={!props.selection ? Icon.Checkmark : Icon.Circle}
           onAction={() => props.onSelect(null)}
         />
       )}
-      <ActionPanel.Section title="Model">
+      <ActionPanel.Section title={t("Model")}>
         {props.models.map((model) => (
           <Action
             key={model.model}
-            title={model.displayName || model.model}
+            title={
+              model.model === "__cli_default__"
+                ? t("CLI Default")
+                : model.displayName || model.model
+            }
             icon={
               selected.model === model.model
                 ? Icon.Checkmark
@@ -112,7 +122,9 @@ export function EffortMenu(props: ModelMenuProps) {
   });
   return (
     <ActionPanel.Submenu
-      title={`Effort Level: ${selected.effort || "Auto"}`}
+      title={t("Effort Level: {effort}", {
+        effort: selected.effort || t("Auto"),
+      })}
       icon={Icon.Gauge}
       isLoading={props.loading}
       onOpen={() => loadOnOpen(props)}
@@ -131,7 +143,9 @@ export function EffortMenu(props: ModelMenuProps) {
         </ActionPanel.Section>
       )}
       {model && !efforts.length && (
-        <ActionPanel.Section title="This model does not expose an adjustable effort level.">
+        <ActionPanel.Section
+          title={t("This model does not expose an adjustable effort level.")}
+        >
           <RefreshModels {...props} />
         </ActionPanel.Section>
       )}
