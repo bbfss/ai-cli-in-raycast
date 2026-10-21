@@ -42,7 +42,7 @@ function commandHost(t, commandName, launch = {}, options = {}) {
     useEffect(fn, deps) { const i = cursor++; if (!scope[i] || deps.some((value, n) => value !== scope[i][n])) { scope[i] = deps; effects.push(fn); } },
   };
   const saved = new Map([[ACTIVE_PROVIDER_KEY, commandName === 'gemini' ? 'codex' : 'gemini']]);
-  const preferences = { activeProvider: saved.get(ACTIVE_PROVIDER_KEY), ...options.preferences };
+  const preferences = { uiLanguage: 'en', activeProvider: saved.get(ACTIVE_PROVIDER_KEY), ...options.preferences };
   for (const provider of providerIds) {
     const keys = storageKeys(provider);
     const selection = { model: `${provider}-selected-model`, effort: '' };

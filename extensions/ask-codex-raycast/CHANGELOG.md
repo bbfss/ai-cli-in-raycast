@@ -1,5 +1,11 @@
 # AI CLI in Raycast
 
+## [System Interface Language] - 2026-10-21
+
+- Default chats, the launcher and CLI Settings to Follow System, with simplified/traditional Chinese script detection and English fallback.
+- Retain manual English, 简体中文 and 繁體中文 choices and existing selections.
+- Pass 295 tests, build, TypeScript and lint. Select Follow System in native Windows preferences and verify the reopened launcher displays Chinese without sending inference or changing drafts.
+
 ## [Chinese Preference Descriptions] - 2026-10-21
 
 - Replace English-only native preference descriptions and controls with Chinese-first bilingual text, including all six default strategies, detection, Codex permissions, and CLI paths. Add bilingual extension/command descriptions and prompt placeholders.

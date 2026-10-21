@@ -11,8 +11,24 @@ const {
 
 afterEach(() => setLanguage("en"));
 
-test("language selection accepts explicit supported values and safely defaults to English", () => {
-  for (const value of [undefined, null, "auto", "de", {}, "EN"]) {
+function systemLocale(context, initial) {
+  let locale = initial;
+  const original = Intl.DateTimeFormat.prototype.resolvedOptions;
+  context.mock.method(
+    Intl.DateTimeFormat.prototype,
+    "resolvedOptions",
+    function () {
+      return { ...original.call(this), locale };
+    },
+  );
+  return (value) => {
+    locale = value;
+  };
+}
+
+test("language selection accepts explicit supported values and invalid nonempty settings fall back to English", (context) => {
+  systemLocale(context, "zh-CN");
+  for (const value of ["auto", "de", {}, "EN"]) {
     assert.equal(setLanguage(value), "en");
     assert.equal(uiLanguage(), "en");
     assert.equal(t("CLI Settings"), "CLI Settings");
@@ -22,6 +38,63 @@ test("language selection accepts explicit supported values and safely defaults t
   assert.equal(setLanguage("zh-TW"), "zh-TW");
   assert.equal(t("CLI Settings"), "CLI 設定");
   assert.equal(t("Save and Start Chatting"), "儲存並開始對話");
+});
+
+test("system and absent language settings follow real locale scripts and unsupported locales fall back to English", (context) => {
+  const changeLocale = systemLocale(context, "en-US");
+  for (const [locale, expected, label] of [
+    ["zh-CN", "zh-CN", "CLI 设置"],
+    ["zh-TW", "zh-TW", "CLI 設定"],
+    ["zh-HK", "zh-TW", "CLI 設定"],
+    ["zh-Hant", "zh-TW", "CLI 設定"],
+    ["zh-Hans-HK", "zh-CN", "CLI 设置"],
+    ["zh-Hant-CN", "zh-TW", "CLI 設定"],
+    ["en-US", "en", "CLI Settings"],
+    ["fr-FR", "en", "CLI Settings"],
+  ]) {
+    changeLocale(locale);
+    for (const value of ["system", undefined, null]) {
+      assert.equal(setLanguage(value), expected, `${locale}: ${String(value)}`);
+      assert.equal(uiLanguage(), expected);
+      assert.equal(t("CLI Settings"), label);
+    }
+  }
+});
+
+test("manual language choices override the system while raw conversation and CLI content stays intact", (context) => {
+  const changeLocale = systemLocale(context, "zh-TW");
+  const messages = Object.freeze([
+    Object.freeze({ id: "user", role: "user", content: "CLI Settings" }),
+    Object.freeze({
+      id: "assistant",
+      role: "assistant",
+      content: "Model: gpt-6.1-sol\nCLI Settings",
+    }),
+  ]);
+  const original = JSON.stringify(messages);
+  for (const locale of ["zh-CN", "zh-TW", "en-US"]) {
+    changeLocale(locale);
+    for (const [selection, label] of [
+      ["en", "CLI Settings"],
+      ["zh-CN", "CLI 设置"],
+      ["zh-TW", "CLI 設定"],
+    ]) {
+      assert.equal(setLanguage(selection), selection);
+      assert.equal(uiLanguage(), selection);
+      assert.equal(t("CLI Settings"), label);
+      const rendered = conversationMarkdown(
+        messages,
+        "/assets",
+        "",
+        "CLI raw error",
+        "Gemini",
+      );
+      assert.match(rendered, /> CLI Settings/);
+      assert.match(rendered, /Model: gpt-6\.1-sol *\nCLI Settings/);
+      assert.match(rendered, /CLI raw error/);
+      assert.equal(JSON.stringify(messages), original);
+    }
+  }
 });
 
 test("placeholder substitution preserves opaque values, missing tokens, and unknown diagnostics", () => {

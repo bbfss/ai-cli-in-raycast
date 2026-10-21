@@ -168,7 +168,7 @@ function chat(t, provider = "antigravity", initialDraft = "", options = {}) {
       EmptyView: "empty",
     }),
     environment: { assetsPath: "/assets" },
-    getPreferenceValues: () => options.preferences || {},
+    getPreferenceValues: () => ({ uiLanguage: "en", ...options.preferences }),
     Icon: {},
     Keyboard: { Shortcut: { Common: {} } },
     Toast: { Style: {} },

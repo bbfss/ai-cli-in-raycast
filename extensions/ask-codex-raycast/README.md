@@ -29,7 +29,7 @@ Open **CLI Settings** to see the six CLI entries first, followed by Preferences.
 
 | Preference                      | Behavior                                                                            |
 | ------------------------------- | ----------------------------------------------------------------------------------- |
-| Interface Language              | English, 简体中文, or 繁體中文; English is the default                              |
+| Interface Language              | Follow System by default; manually choose English, 简体中文, or 繁體中文            |
 | Automatic CLI Detection         | Enabled by default; searches supported standard installation paths                  |
 | Per-CLI Model Strategy          | Reuse the last model/effort, or apply a fixed pair chosen from the live CLI catalog |
 | Per-CLI Path                    | An explicit path always takes priority; leave empty for automatic discovery         |
@@ -38,7 +38,9 @@ Open **CLI Settings** to see the six CLI entries first, followed by Preferences.
 
 When automatic detection is disabled, enter an explicit path for each CLI you use. A failed custom path is reported rather than silently replaced by an automatically found installation. Detection discovers local files; **Found** does not mean signed in, entitled to a model, or able to send a prompt. Use **Detect CLIs Again** after installing a CLI or changing paths.
 
-Chats, the launcher, and CLI Settings follow the selected language; reopen the command after changing it. Raycast's native extension preference page uses static manifest text and cannot follow this selector. All preference titles, descriptions, checkbox labels, and non-language dropdown choices therefore show Chinese first with English alongside. Extension and command descriptions are bilingual too. Raycast's own controls, such as Settings, Search, and Show more, keep the host's language. Language selection does not translate model IDs, CLI diagnostics, saved prompts, or AI responses, and it does not change the language an AI must answer in.
+Chats, the launcher, and CLI Settings default to **Follow System**, using the operating system locale. Chinese locales use simplified or traditional Chinese according to their script; other languages use English. A manual English, 简体中文, or 繁體中文 selection overrides the system. Reopen the command after changing the language or system locale. Existing manual choices are retained.
+
+Raycast's native extension preference page uses static manifest text. Its titles, descriptions, checkbox labels, and dropdown choices show Chinese first with English alongside. Extension and command descriptions are bilingual too. Raycast's own controls, such as Settings, Search, and Show more, keep the host's language. Language selection does not translate model IDs, CLI diagnostics, saved prompts, or AI responses, and it does not change the language an AI must answer in.
 
 ## Providers and limitations
 
@@ -86,7 +88,7 @@ The provider/agent separation described by [Magpie](https://github.com/yetone/ma
 
 ## Verification and development status
 
-Build, standalone TypeScript, lint and **293 tests passed** for the current implementation. The latest native Raycast 2.8.2 check read back all 17 preference titles and visually confirmed Chinese-first descriptions, the selected 简体中文 language, and translated last/fixed and sandbox options. The check changed no preference values or chat drafts and sent no inference. Earlier native checks confirmed the single-hint input and actual Codex model/effort menus. A native sequence selected a model, then an effort, and confirmed that message entry stayed open with keyboard focus and the existing draft retained. The final person avatar was separately checked beside the human role labels. Fixed-default save/reopen/reset cases and retired-branch guards are verified through production-component tests, rather than claimed as native acceptance.
+Build, standalone TypeScript, lint and **295 tests passed** for the current implementation. Native Raycast 2.8.2 has Follow System selected; reopening the launcher on this Windows zh-CN system displayed Chinese controls and detection states. The checks sent no inference and left chat drafts intact. Native checks also confirmed all 17 preference titles, Chinese-first descriptions, and translated last/fixed and sandbox options. Earlier checks confirmed the single-hint input and actual Codex model/effort menus. A native sequence selected a model, then an effort, and confirmed that message entry stayed open with keyboard focus and the existing draft retained. The final person avatar was separately checked beside the human role labels. Fixed-default save/reopen/reset cases and retired-branch guards are verified through production-component tests, rather than claimed as native acceptance.
 
 Earlier native checks confirmed Markdown prose, code blocks and provider logos. Logo and provider-name centers align within 0.5 display pixels in the measured Windows view. The user sent a message and received a complete reply in this interface.
 

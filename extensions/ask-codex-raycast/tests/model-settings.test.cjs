@@ -75,7 +75,7 @@ function form(
       Description: "description",
       Dropdown: Object.assign(() => {}, { Item: "option" }),
     }),
-    getPreferenceValues: () => ({ ...preferences }),
+    getPreferenceValues: () => ({ uiLanguage: "en", ...preferences }),
     useNavigation: () => ({
       pop: () => {
         pops++;
@@ -549,7 +549,7 @@ function settingsHost(t) {
         Detail: Object.assign(() => {}, { Metadata }),
       }),
     }),
-    getPreferenceValues: () => ({}),
+    getPreferenceValues: () => ({ uiLanguage: "en" }),
     Color: {},
     Icon: {},
     Keyboard: { Shortcut: { Common: {} } },

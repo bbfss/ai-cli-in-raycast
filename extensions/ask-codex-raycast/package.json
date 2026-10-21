@@ -198,10 +198,14 @@
       "name": "uiLanguage",
       "type": "dropdown",
       "title": "界面语言 / Interface Language",
-      "description": "用于聊天、启动器与插件内设置，重新打开命令后生效。本设置页固定为中英双语。Language for chats, launcher, and CLI Settings; reopen the command after changing. This preferences page stays bilingual.",
+      "description": "聊天、启动器与插件内设置默认跟随系统语言，也可手动指定。更改后重新打开命令生效。Language for chats, launcher, and CLI Settings. Follow the system or choose a language, then reopen the command.",
       "required": false,
-      "default": "en",
+      "default": "system",
       "data": [
+        {
+          "title": "跟随系统 / Follow System",
+          "value": "system"
+        },
         {
           "title": "English",
           "value": "en"

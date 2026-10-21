@@ -4,7 +4,19 @@ let language: UILanguage = "en";
 
 /** Controls runtime UI; Raycast's host preference text is statically bilingual. */
 export function setLanguage(value: unknown): UILanguage {
-  language = value === "zh-CN" || value === "zh-TW" ? value : "en";
+  if (value === "system" || value == null) {
+    const locale = new Intl.Locale(
+      Intl.DateTimeFormat().resolvedOptions().locale,
+    );
+    language =
+      locale.language === "zh"
+        ? locale.maximize().script === "Hant"
+          ? "zh-TW"
+          : "zh-CN"
+        : "en";
+  } else {
+    language = value === "zh-CN" || value === "zh-TW" ? value : "en";
+  }
   return language;
 }
 
