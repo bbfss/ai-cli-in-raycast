@@ -24,15 +24,15 @@ Command enablement controls Raycast entry points; it does not uninstall a CLI or
 
 ## Settings and detection
 
-Open **CLI Settings** to see the six installation states and detected paths. Settings uses a native List and metadata inspector; setup uses native Forms. Chat uses a native List with one conversation row and a Markdown detail pane, keeping the input visible. Raycast supplies the split layout; this prototype does not reproduce a full-width custom chat application.
+Open **CLI Settings** to see the six installation states and detected paths. Settings uses a native List and metadata inspector; setup uses native Forms. Chat uses a full-width native List: the input stays at the top, with questions, streaming replies and earlier exchanges below. Markdown reading remains available through View Full Conversation.
 
-| Preference | Behavior |
-| --- | --- |
-| Interface Language | English, 简体中文, or 繁體中文; English is the default |
-| Automatic CLI Detection | Enabled by default; searches supported standard installation paths |
-| Per-CLI Path | An explicit path always takes priority; leave empty for automatic discovery |
-| Working Directory | Optional directory used by the CLI |
-| Codex Web Search / Sandbox Mode | Codex-specific controls |
+| Preference                      | Behavior                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| Interface Language              | English, 简体中文, or 繁體中文; English is the default                      |
+| Automatic CLI Detection         | Enabled by default; searches supported standard installation paths          |
+| Per-CLI Path                    | An explicit path always takes priority; leave empty for automatic discovery |
+| Working Directory               | Optional directory used by the CLI                                          |
+| Codex Web Search / Sandbox Mode | Codex-specific controls                                                     |
 
 When automatic detection is disabled, enter an explicit path for each CLI you use. A failed custom path is reported rather than silently replaced by an automatically found installation. Detection discovers local files; **Found** does not mean signed in, entitled to a model, or able to send a prompt. Use **Detect CLIs Again** after installing a CLI or changing paths.
 
@@ -40,11 +40,11 @@ Extension-controlled UI follows the selected language. Raycast's static command 
 
 ## Providers and limitations
 
-| Additional CLI | Model choices | Resume | Local Windows evidence (2026-10-21) |
-| --- | --- | --- | --- |
-| Qoder / Qoder CN | Live `--list-models`, plus CLI Default | Exact session ID | Qoder CN 1.1.74: inference, restart/resume, cancel/continue passed; international build untested |
-| WorkBuddy | Model aliases from installed `--help`, plus CLI Default | Exact session ID | Embedded WorkBuddy AI CLI starts but requires its own login; inference/resume unverified |
-| Gemini CLI | CLI Default; no invented catalog | Exact session UUID | 0.65.0 starts; the local account returned `UNSUPPORTED_CLIENT`, so inference/resume unverified |
+| Additional CLI   | Model choices                                           | Resume             | Local Windows evidence (2026-10-21)                                                              |
+| ---------------- | ------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------ |
+| Qoder / Qoder CN | Live `--list-models`, plus CLI Default                  | Exact session ID   | Qoder CN 1.1.74: inference, restart/resume, cancel/continue passed; international build untested |
+| WorkBuddy        | Model aliases from installed `--help`, plus CLI Default | Exact session ID   | Embedded WorkBuddy AI CLI starts but requires its own login; inference/resume unverified         |
+| Gemini CLI       | CLI Default; no invented catalog                        | Exact session UUID | 0.65.0 starts; the local account returned `UNSUPPORTED_CLIENT`, so inference/resume unverified   |
 
 These additional CLIs do not expose steering or effort controls here. Qoder and WorkBuddy receive no-tools, strict-empty-MCP, hooks-disabled and noninteractive permission flags. Qoder CN's actual trace confirmed empty tools/MCP. WorkBuddy's init still advertised tools; effective restriction remains unverified pending CLI login. Gemini uses default approval mode and existing configuration, with extensions disabled; it is not represented as a no-tools or Codex-equivalent sandbox. Complete any workspace trust requirement in the CLI itself.
 
@@ -62,7 +62,7 @@ The extension uses existing local CLI authentication. It does not import browser
 
 npm CLIs are resolved to known Node entrypoints and require Node.js on PATH. Windows `.cmd`/extensionless npm shims never interpolate prompts. For custom WorkBuddy installations, set WorkBuddy CLI Path to `resources/app.asar.unpacked/cli/bin/codebuddy`; the embedded launch selects its WorkBuddy bundle. A separate CodeBuddy CLI is not automatically treated as WorkBuddy. A `.js` entrypoint can also be selected for Gemini or Qoder. The extension does not install CLIs itself. Antigravity requires a native executable on Windows; shell wrappers are not executed.
 
-The latest question-and-answer group appears first, with the question above its answer. User messages use Markdown quotation blocks, without avatars. **Stop Response** is available in Actions during a reply; Enter never stops a reply. Codex can accept additional instructions while responding. Other CLIs let you keep writing a draft, then send it manually after the reply finishes or is stopped; drafts are not automatically queued.
+Questions and replies appear as full-width text rows below the persistent input. The latest question-and-answer group appears first, with the question above its answer and earlier exchanges below. Long paragraphs are split into readable rows; stored and copied message text is unchanged. View Full Conversation provides optional Markdown reading. **Stop Response** is available in Actions during a reply; Enter never stops a reply. Codex can accept additional instructions while responding. Other CLIs let you keep writing a draft, then send it manually after the reply finishes or is stopped; drafts are not automatically queued.
 
 A successful send acknowledgement clears the submitted input only if it has not since been edited. Later typing, identical retyping and explicit clearing are protected from an older acknowledgement. Failed sends keep the draft. **Clear Draft** explicitly discards it; Esc follows Raycast's search-field behavior and may clear single-line text before returning.
 
@@ -76,7 +76,7 @@ The provider/agent separation described by [Magpie](https://github.com/yetone/ma
 
 ## Verification and development status
 
-Build, standalone TypeScript, lint and **159 tests passed** for the same-page prototype. Tests include pending-send edits, multiline draft preservation and explicit stop behavior. Windows keyboard injection verified Enter sending from the persistent input and a reply on the same page; Stop Response was also verified through Actions. Further native draft checks and a fresh macOS run remain outstanding.
+Build, standalone TypeScript, lint and **163 tests passed** for the same-page prototype. Tests include pending-send edits, multiline draft preservation and explicit stop behavior. Windows keyboard injection verified Enter sending from the persistent input and a reply on the same page; Stop Response was also verified through Actions. Further native draft checks and a fresh macOS run remain outstanding.
 
 Earlier native Raycast checks showed the Chinese launcher with six detection states; opening WorkBuddy automatically reached model selection. This demonstrates discovery and onboarding, not successful WorkBuddy authentication.
 

@@ -1,7 +1,65 @@
 require("./load.cjs");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { conversationMarkdown } = require("../src/chat-text.ts");
+const {
+  conversationMarkdown,
+  splitChatLines,
+  conversationGroups,
+} = require("../src/chat-text.ts");
+
+test("list lines preserve all text and split near words without cutting Unicode graphemes", () => {
+  const chinese = "汉".repeat(121);
+  assert.deepEqual(
+    splitChatLines(chinese).map((line) => [...line].length),
+    [48, 48, 25],
+  );
+  assert.equal(splitChatLines(chinese).join(""), chinese);
+  const text = "one two three four five six seven";
+  const wrapped = splitChatLines(text, 12);
+  assert.equal(wrapped.join(""), text);
+  assert.ok(wrapped.slice(0, -1).every((line) => / $/.test(line)));
+  const cluster = "👨‍👩‍👧‍👦e\u0301";
+  const unicode = cluster.repeat(150);
+  const lines = splitChatLines(unicode, 10);
+  assert.equal(lines.join(""), unicode);
+  const segmented = lines.flatMap((line) =>
+    [
+      ...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(
+        line,
+      ),
+    ].map((part) => part.segment),
+  );
+  assert.ok(segmented.every((part) => part === "👨‍👩‍👧‍👦" || part === "e\u0301"));
+  assert.deepEqual(splitChatLines("first\r\n\nlast\n"), [
+    "first",
+    "",
+    "last",
+    "",
+  ]);
+});
+
+test("list groups retain all history and within-exchange steering order without mutation", () => {
+  const messages = [
+    { id: "1", role: "user", content: "first" },
+    { id: "2", role: "assistant", content: "first answer" },
+    { id: "3", role: "user", content: "second" },
+    { id: "4", role: "user", kind: "steer", content: "extra" },
+    { id: "5", role: "assistant", content: "second answer" },
+  ];
+  assert.deepEqual(
+    conversationGroups(messages).map((group) =>
+      group.map((message) => message.id),
+    ),
+    [
+      ["3", "4", "5"],
+      ["1", "2"],
+    ],
+  );
+  assert.deepEqual(
+    messages.map((message) => message.id),
+    ["1", "2", "3", "4", "5"],
+  );
+});
 
 test("latest exchange comes first while every question stays before its answer", () => {
   const messages = [

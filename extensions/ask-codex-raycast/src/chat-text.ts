@@ -2,6 +2,58 @@ import { t } from "./i18n";
 import type { ChatMessage } from "./conversations";
 import { renderMarkdown } from "./markdown";
 
+/** Newest exchanges first; preserve the original order inside each exchange. */
+export function conversationGroups(messages: ChatMessage[]): ChatMessage[][] {
+  const groups: ChatMessage[][] = [];
+  for (const message of messages) {
+    if (!groups.length || (message.role === "user" && message.kind !== "steer"))
+      groups.push([]);
+    groups[groups.length - 1].push(message);
+  }
+  return groups.reverse();
+}
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+const wideCharacter =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Extended_Pictographic}]/u;
+
+/** Approximate native list width without truncating words or Unicode clusters. */
+export function splitChatLines(text: string, maxWidth = 80): string[] {
+  const lines: string[] = [];
+  for (const paragraph of text.split(/\r\n|[\r\n]/)) {
+    const parts = [...graphemes.segment(paragraph)].map((part) => part.segment);
+    if (!parts.length) {
+      lines.push("");
+      continue;
+    }
+    let start = 0,
+      index = 0,
+      width = 0,
+      boundary = -1;
+    while (index < parts.length) {
+      const size = wideCharacter.test(parts[index]) ? 5 : 3;
+      if (index > start && width + size > maxWidth * 3) {
+        const end = boundary > start ? boundary : index;
+        lines.push(parts.slice(start, end).join(""));
+        start = end;
+        index = end;
+        width = 0;
+        boundary = -1;
+        continue;
+      }
+      width += size;
+      if (
+        /\s/u.test(parts[index]) ||
+        /[，。！？、；：,.!?;:]/u.test(parts[index])
+      )
+        boundary = index + 1;
+      index += 1;
+    }
+    if (start < parts.length) lines.push(parts.slice(start).join(""));
+  }
+  return lines;
+}
+
 export function conversationMarkdown(
   messages: ChatMessage[],
   _assetsPath: string,
@@ -11,13 +63,7 @@ export function conversationMarkdown(
 ) {
   // Keep the latest exchange in view without reversing question/answer order.
   // Steering and multiple assistant items stay in their original turn order.
-  const rounds: ChatMessage[][] = [];
-  for (const message of messages) {
-    if (!rounds.length || (message.role === "user" && message.kind !== "steer"))
-      rounds.push([]);
-    rounds[rounds.length - 1].push(message);
-  }
-  const cards = rounds.reverse().map((round) =>
+  const cards = conversationGroups(messages).map((round) =>
     round
       .map((message, index) => {
         const body = renderMarkdown(message.content) || t("Thinking…");

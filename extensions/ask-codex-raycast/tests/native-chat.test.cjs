@@ -31,9 +31,14 @@ function chat(t, provider = "antigravity", initialDraft = "") {
         },
       ];
     },
-    useMemo(fn) {
-      cursor++;
-      return fn();
+    useMemo(fn, deps) {
+      const id = cursor++;
+      if (
+        !slots[id] ||
+        deps.some((value, index) => value !== slots[id].deps[index])
+      )
+        slots[id] = { deps, value: fn() };
+      return slots[id].value;
     },
     useEffect(fn, deps) {
       const i = cursor++;
@@ -78,6 +83,7 @@ function chat(t, provider = "antigravity", initialDraft = "") {
   const launches = [];
   const toasts = [];
   const timeline = [];
+  let lineSplits = 0;
   const prompts = [],
     instructions = [];
   const client = {
@@ -119,6 +125,7 @@ function chat(t, provider = "antigravity", initialDraft = "") {
   };
   const jsx = (type, props) => ({ type, props });
   const Action = Object.assign(() => {}, {
+    Push: "push",
     OpenInBrowser: "browser",
     CopyToClipboard: "copy",
   });
@@ -128,6 +135,8 @@ function chat(t, provider = "antigravity", initialDraft = "") {
     Detail: "detail",
     List: Object.assign(() => {}, {
       Item: Object.assign(() => {}, { Detail: "item-detail" }),
+      Section: "list-section",
+      EmptyView: "empty",
     }),
     environment: { assetsPath: "/assets" },
     getPreferenceValues: () => ({}),
@@ -177,10 +186,16 @@ function chat(t, provider = "antigravity", initialDraft = "") {
       return { ModelMenu: "models", EffortMenu: "efforts" };
     if (id === "./setup") return { SetupWizard: "setup" };
     if (id === "./history") return { useSessionHistory: () => ({}) };
-    if (id === "./chat-text")
+    if (id === "./chat-text") {
+      const production = require("../src/chat-text.ts");
       return {
-        conversationMarkdown: (_, __, status, error) => status + " " + error,
+        ...production,
+        splitChatLines: (...args) => {
+          lineSplits++;
+          return production.splitChatLines(...args);
+        },
       };
+    }
     return require(path.resolve(path.dirname(filename), id + ".ts"));
   };
   const source = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
@@ -237,6 +252,18 @@ function chat(t, provider = "antigravity", initialDraft = "") {
       assert.equal(find(api.List).isLoading, false);
     },
     input: () => find(api.List),
+    selectRow: (id) => find(api.List).onSelectionChange(id),
+    menuCounts: () => {
+      const tree = nodes(render());
+      return {
+        full: tree.filter((node) => node.type === "push").length,
+        models: tree.filter((node) => node.type === "models").length,
+        providers: tree.filter((node) => node.type === "providers").length,
+      };
+    },
+    get lineSplits() {
+      return lineSplits;
+    },
     send: (text) => {
       if (text !== undefined && text !== find(api.List).searchText)
         find(api.List).onSearchTextChange(text);
@@ -252,9 +279,29 @@ function chat(t, provider = "antigravity", initialDraft = "") {
         .props.onAction(),
     primary: () => nodes(render()).find((node) => node.type === Action).props,
     row: () => find(api.List.Item),
+    rows: () =>
+      nodes(render())
+        .filter((node) => node.type === api.List.Item)
+        .map((node) => node.props),
+    messageRows: () =>
+      nodes(render())
+        .filter(
+          (node) =>
+            node.type === api.List.Item &&
+            !/^(status:|draft:|draft-note:)/.test(node.props.id),
+        )
+        .map((node) => node.props),
+    rowEnter: (index) => {
+      const row = nodes(render()).filter((node) => node.type === api.List.Item)[
+        index
+      ];
+      return nodes(row.props.actions)
+        .find((node) => node.type === Action)
+        .props.onAction();
+    },
     providers: () => find("providers"),
     models: () => find("models"),
-    markdown: () => find("item-detail").markdown,
+    markdown: () => find("push").target.props.markdown,
     stop: () =>
       nodes(render())
         .find(
@@ -313,6 +360,16 @@ function chat(t, provider = "antigravity", initialDraft = "") {
     timeline,
     prompts,
     instructions,
+    delta(text) {
+      event({
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: client.currentThreadId,
+          itemId: `reply-${started}`,
+          delta: text,
+        },
+      });
+    },
     complete() {
       client.currentTurnId = null;
       event({
@@ -336,19 +393,83 @@ function chat(t, provider = "antigravity", initialDraft = "") {
   };
 }
 
-test("native conversation keeps the input and one detail row on the same page", async (t) => {
+test("native conversation keeps the input and full-width message rows on the same page", async (t) => {
   const ui = chat(t);
   await ui.ready();
   assert.equal(ui.input().filtering, false);
   assert.equal(ui.input().throttle, false);
-  assert.equal(ui.input().isShowingDetail, true);
-  assert.equal(ui.input().selectedItemId, "conversation");
-  assert.equal(ui.row().id, "conversation");
+  assert.equal(ui.input().isShowingDetail, false);
+  assert.equal(ui.input().selectedItemId, undefined);
+  assert.equal(ui.rows().length, 0);
   assert.equal(ui.primary().title, "Send Message");
   ui.input().onSearchTextChange("literal $HOME `text`");
   await ui.send();
   assert.deepEqual(ui.prompts, ["literal $HOME `text`"]);
   assert.equal(ui.input().searchText, "");
+  assert.equal(ui.messageRows()[0].title, "literal $HOME `text`");
+  assert.ok(ui.rows().every((row) => !row.detail));
+});
+
+test("two exchanges remain visible in order, streaming updates the rows, and typing does not filter history", async (t) => {
+  const ui = chat(t);
+  await ui.ready();
+  await ui.send("first question");
+  ui.delta("first answer");
+  ui.complete();
+  await ui.send("second question");
+  ui.delta("second ");
+  assert.deepEqual(
+    ui.messageRows().map((row) => row.title),
+    ["second question", "second ", "first question", "first answer"],
+  );
+  ui.delta("answer");
+  assert.deepEqual(
+    ui.messageRows().map((row) => row.title),
+    ["second question", "second answer", "first question", "first answer"],
+  );
+  ui.complete();
+  ui.input().onSearchTextChange("draft matching no older messages");
+  assert.equal(ui.input().filtering, false);
+  assert.deepEqual(
+    ui.messageRows().map((row) => row.title),
+    ["second question", "second answer", "first question", "first answer"],
+  );
+  await ui.rowEnter(ui.rows().length - 1);
+  assert.deepEqual(ui.prompts, [
+    "first question",
+    "second question",
+    "draft matching no older messages",
+  ]);
+  assert.equal(ui.input().searchText, "");
+});
+
+test("hundreds of history lines serialize only one full action tree and input does not rewrap history", async (t) => {
+  const ui = chat(t);
+  await ui.ready();
+  await ui.send("long reply");
+  ui.delta(
+    Array.from({ length: 500 }, (_, index) => `history line ${index}`).join(
+      "\n",
+    ),
+  );
+  ui.complete();
+  assert.equal(ui.messageRows().length, 501);
+  assert.deepEqual(ui.menuCounts(), { full: 1, models: 1, providers: 1 });
+  assert.equal(ui.input().actions, undefined);
+  assert.equal(ui.input().selectedItemId, ui.rows()[0].id);
+  const oldRow = ui.rows().at(-1).id;
+  ui.selectRow(oldRow);
+  assert.equal(ui.input().selectedItemId, oldRow);
+  assert.deepEqual(ui.menuCounts(), { full: 1, models: 1, providers: 1 });
+  const wrapped = ui.lineSplits;
+  ui.input().onSearchTextChange("new draft");
+  ui.input();
+  assert.equal(ui.lineSplits, wrapped);
+  ui.selectRow("row-no-longer-present");
+  assert.equal(ui.input().selectedItemId, ui.rows()[0].id);
+  assert.deepEqual(ui.menuCounts(), { full: 1, models: 1, providers: 1 });
+  await ui.rowEnter(ui.rows().length - 1);
+  assert.deepEqual(ui.prompts, ["long reply", "new draft"]);
 });
 
 test("non-steering reply permits drafting but neither auto-sends nor makes Stop the Enter action", async (t) => {
@@ -357,7 +478,7 @@ test("non-steering reply permits drafting but neither auto-sends nor makes Stop 
   await ui.send("first");
   ui.input().onSearchTextChange("next draft");
   assert.equal(ui.primary().title, "Wait for Response");
-  assert.match(ui.row().subtitle, /Keep drafting/);
+  assert.ok(ui.rows().some((row) => /Keep drafting/.test(row.title)));
   await ui.send();
   assert.equal(ui.interrupted, 0);
   assert.equal(ui.started, 1);
@@ -387,6 +508,14 @@ test("an existing multiline draft is visible, resists search normalization, and 
   await ui.ready();
   assert.equal(ui.primary().title, "Send Saved Multiline Draft");
   assert.ok(ui.markdown().includes(raw));
+  assert.equal(
+    ui
+      .rows()
+      .filter((row) => row.id.startsWith("draft:"))
+      .map((row) => row.title)
+      .join(""),
+    raw.replace(/[\r\n]/g, ""),
+  );
   ui.input().onSearchTextChange(raw.replace(/[\r\n]+/g, " "));
   assert.equal(ui.input().searchText, raw);
   assert.equal(ui.toasts.at(-1).title, "Multiline draft preserved");

@@ -1,5 +1,10 @@
 # AI CLI in Raycast
 
+## [Full-width Conversation List] - 2026-10-21
+
+- Keep questions, streaming replies and previous exchanges directly below the persistent input; remove the provider sidebar.
+- Preserve Enter sending and offer full Markdown reading as an optional action.
+
 ## [Same-page Input and Minimal Logo] - 2026-10-21
 
 - Keep a native single-line input and Markdown conversation on the same List/detail page; Enter sends without opening another editor.
