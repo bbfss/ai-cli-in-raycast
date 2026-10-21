@@ -26,8 +26,24 @@ function menus(overrides = {}) {
       if (!(slot in active)) active[slot] = { current: value };
       return active[slot];
     },
+    useState(value) {
+      const hooks = active;
+      const slot = cursor++;
+      if (!(slot in hooks))
+        hooks[slot] = typeof value === "function" ? value() : value;
+      return [
+        hooks[slot],
+        (next) => {
+          hooks[slot] = typeof next === "function" ? next(hooks[slot]) : next;
+        },
+      ];
+    },
+    useEffect(effect) {
+      const slot = cursor++;
+      if (!(slot in active)) active[slot] = { effect, pending: true };
+    },
   };
-  const jsx = (type, props) => ({ type, props });
+  const jsx = (type, props, key) => ({ type, props, key });
   const Action = () => {};
   const api = {
     Action,
@@ -77,13 +93,32 @@ function menus(overrides = {}) {
       return expand(node.type(node.props));
     return [node, ...[node.props?.children].flat(Infinity).flatMap(expand)];
   }
+  function raw(node) {
+    if (!node || typeof node !== "object") return [];
+    return [node, ...[node.props?.children].flat(Infinity).flatMap(raw)];
+  }
   function render(kind) {
     active = references[kind];
     cursor = 0;
-    return loaded.exports[kind](props);
+    const node = loaded.exports[kind](props);
+    for (const hook of active) {
+      if (hook?.pending) {
+        hook.pending = false;
+        hook.cleanup = hook.effect();
+      }
+    }
+    return node;
   }
   return {
     render,
+    nodes: (kind) => expand(render(kind)),
+    choices: (kind) =>
+      expand(render(kind))
+        .filter((node) => node.type === "submenu")
+        .slice(1)
+        .map((node) => node.props),
+    rawChoices: (kind) =>
+      raw(render(kind)).filter((node) => node.type?.name === "SelectionChoice"),
     actions: (kind) =>
       expand(render(kind))
         .filter((node) => node.type === Action)
@@ -94,6 +129,17 @@ function menus(overrides = {}) {
         .map((node) => node.props),
     update(change) {
       props = { ...props, ...change };
+    },
+    unmount(kind) {
+      for (const hook of references[kind]) hook?.cleanup?.();
+    },
+    replayEffects(kind) {
+      for (const hook of references[kind]) {
+        if (hook?.effect) {
+          hook.cleanup?.();
+          hook.cleanup = hook.effect();
+        }
+      }
     },
     selected,
     get refreshes() {
@@ -279,4 +325,250 @@ test("refreshed models and changed current model rerender real choices and inval
     .find((action) => action.title === "medium")
     .onAction();
   assert.deepEqual(ui.selected, [{ model: "C", effort: "medium" }]);
+});
+
+function sharedInput() {
+  let opens = 0,
+    renders = 0,
+    draft = "existing draft";
+  return {
+    ref: {
+      current: {
+        title: "Enter Message",
+        open() {
+          opens++;
+        },
+        onSearchTextChange(text) {
+          draft = text;
+        },
+        content() {
+          renders++;
+          return { type: "continued-input", props: { draft } };
+        },
+      },
+    },
+    get opens() {
+      return opens;
+    },
+    get renders() {
+      return renders;
+    },
+    get draft() {
+      return draft;
+    },
+  };
+}
+
+for (const [kind, title, expected, inactive] of [
+  ["ModelMenu", "B", { model: "B", effort: "medium" }, "A"],
+  ["EffortMenu", "low", { model: "A", effort: "low" }, "high"],
+]) {
+  test(`${kind} applies a choice and lazily opens the shared message input`, () => {
+    const input = sharedInput();
+    const ui = menus({ inputRef: input.ref });
+    assert.equal(
+      ui.nodes(kind).some((node) => node.type === "continued-input"),
+      false,
+    );
+    assert.equal(input.renders, 0);
+    const choice = ui.choices(kind).find((entry) => entry.title === title);
+    assert.equal(choice.filtering, false);
+    assert.equal(choice.onAction, undefined);
+    choice.onOpen();
+    assert.deepEqual(ui.selected, [expected]);
+    assert.equal(input.opens, 1);
+    const active = ui
+      .choices(kind)
+      .find((entry) => entry.title === "Enter Message");
+    assert.ok(active);
+    assert.ok(ui.nodes(kind).some((node) => node.type === "continued-input"));
+    active.onSearchTextChange("continued text  ");
+    assert.equal(input.draft, "continued text  ");
+    assert.deepEqual(ui.selected, [expected]);
+  });
+
+  test(`${kind} keeps its active input branch through refresh and model removal while hiding old choices`, () => {
+    const input = sharedInput();
+    const ui = menus({ inputRef: input.ref });
+    const oldInactive = ui
+      .choices(kind)
+      .find((entry) => entry.title === inactive);
+    ui.choices(kind)
+      .find((entry) => entry.title === title)
+      .onOpen();
+    const original = ui.rawChoices(kind).find((node) => node.props.active);
+    for (const state of [
+      { models: [], loading: true },
+      { loading: false, error: "refresh failed" },
+      {
+        error: "",
+        models: [model("C", ["medium"])],
+        selection: { model: "C", effort: "medium" },
+      },
+    ]) {
+      ui.update(state);
+      const active = ui.rawChoices(kind).find((node) => node.props.active);
+      assert.equal(active.key, original.key);
+      assert.equal(active.type, original.type);
+      assert.ok(ui.nodes(kind).some((node) => node.type === "continued-input"));
+      assert.equal(
+        ui.choices(kind).some((entry) => entry.title === inactive),
+        false,
+      );
+      oldInactive.onOpen();
+      assert.equal(input.opens, 1);
+      assert.deepEqual(ui.selected, [expected]);
+    }
+    const before = input.renders;
+    ui.render(kind).props.onOpen();
+    assert.equal(
+      ui.nodes(kind).some((node) => node.type === "continued-input"),
+      false,
+    );
+    assert.equal(input.renders, before);
+    assert.equal(
+      ui.rawChoices(kind).some((node) => node.props.active),
+      false,
+    );
+    assert.deepEqual(ui.selected, [expected]);
+  });
+
+  test(`${kind} does not enter message input after a rejected or stale selection`, () => {
+    const input = sharedInput();
+    const ui = menus({ inputRef: input.ref, onSelect: () => false });
+    const choice = ui.choices(kind).find((entry) => entry.title === title);
+    choice.onOpen();
+    choice.onSearchTextChange("must not replace draft");
+    assert.equal(input.opens, 0);
+    assert.equal(input.draft, "existing draft");
+    assert.equal(
+      ui.nodes(kind).some((node) => node.type === "continued-input"),
+      false,
+    );
+    ui.update({ loading: true, models: [] });
+    ui.render(kind);
+    choice.onOpen();
+    assert.equal(input.opens, 0);
+    assert.equal(input.renders, 0);
+  });
+
+  test(`${kind} reopening immediately retires active and inactive callbacks before rerender`, () => {
+    const input = sharedInput();
+    const ui = menus({ inputRef: input.ref });
+    const oldInactive = ui
+      .choices(kind)
+      .find((entry) => entry.title === inactive);
+    ui.choices(kind)
+      .find((entry) => entry.title === title)
+      .onOpen();
+    const oldActive = ui
+      .choices(kind)
+      .find((entry) => entry.title === "Enter Message");
+    const before = { opens: input.opens, selected: [...ui.selected] };
+    ui.render(kind).props.onOpen();
+    input.ref.current.onSearchTextChange("new current draft");
+    // Native callbacks can arrive before React removes the retired children.
+    oldActive.onSearchTextChange("late retired text");
+    oldActive.onSearchTextChange("");
+    oldActive.onOpen();
+    oldInactive.onOpen();
+    assert.equal(input.draft, "new current draft");
+    assert.equal(input.opens, before.opens);
+    assert.deepEqual(ui.selected, before.selected);
+    assert.equal(
+      ui.rawChoices(kind).some((node) => node.props.active),
+      false,
+    );
+    ui.choices(kind)
+      .find((entry) => entry.title === title)
+      .onOpen();
+    const current = ui
+      .choices(kind)
+      .find((entry) => entry.title === "Enter Message");
+    current.onSearchTextChange("live draft");
+    assert.equal(input.draft, "live draft");
+    assert.equal(input.opens, before.opens + 1);
+  });
+
+  test(`${kind} reactivating the same key uses a new branch token`, () => {
+    const input = sharedInput();
+    const ui = menus({ inputRef: input.ref });
+    const choice = ui.choices(kind).find((entry) => entry.title === title);
+    choice.onOpen();
+    const first = ui
+      .choices(kind)
+      .find((entry) => entry.title === "Enter Message");
+    // React has not changed the menu epoch; the same option opens again.
+    choice.onOpen();
+    const second = ui
+      .choices(kind)
+      .find((entry) => entry.title === "Enter Message");
+    second.onSearchTextChange("second activation draft");
+    const opens = input.opens;
+    first.onSearchTextChange("old activation must not win");
+    first.onOpen();
+    assert.equal(input.draft, "second activation draft");
+    assert.equal(input.opens, opens);
+    second.onSearchTextChange("current activation still works");
+    assert.equal(input.draft, "current activation still works");
+  });
+
+  test(`${kind} unmount prevents late callbacks reaching a replacement composer`, () => {
+    const input = sharedInput();
+    const ui = menus({ inputRef: input.ref });
+    const oldInactive = ui
+      .choices(kind)
+      .find((entry) => entry.title === inactive);
+    ui.choices(kind)
+      .find((entry) => entry.title === title)
+      .onOpen();
+    const oldActive = ui
+      .choices(kind)
+      .find((entry) => entry.title === "Enter Message");
+    const oldParent = ui.render(kind).props;
+    const selected = [...ui.selected];
+    const refreshes = ui.refreshes;
+    ui.unmount(kind);
+    const replacement = sharedInput();
+    input.ref.current = replacement.ref.current;
+    replacement.ref.current.onSearchTextChange("replacement composer draft");
+    oldActive.onSearchTextChange("retired composer text");
+    oldActive.onOpen();
+    oldInactive.onOpen();
+    oldParent.onOpen();
+    assert.equal(replacement.draft, "replacement composer draft");
+    assert.equal(replacement.opens, 0);
+    assert.deepEqual(ui.selected, selected);
+    assert.equal(ui.refreshes, refreshes);
+  });
+
+  test(`${kind} effect replay retires old callbacks and permits fresh choices`, () => {
+    const input = sharedInput();
+    const ui = menus({ inputRef: input.ref });
+    const oldChoice = ui.choices(kind).find((entry) => entry.title === title);
+    ui.replayEffects(kind);
+    oldChoice.onOpen();
+    assert.equal(input.opens, 0);
+    ui.choices(kind)
+      .find((entry) => entry.title === title)
+      .onOpen();
+    assert.equal(input.opens, 1);
+    const current = ui
+      .choices(kind)
+      .find((entry) => entry.title === "Enter Message");
+    current.onSearchTextChange("fresh after effect replay");
+    assert.equal(input.draft, "fresh after effect replay");
+  });
+}
+
+test("model-choice opening without a mounted composer neither applies a selection nor constructs input", () => {
+  const ui = menus({ inputRef: { current: null } });
+  ui.choices("ModelMenu")
+    .find((entry) => entry.title === "B")
+    .onOpen();
+  assert.deepEqual(ui.selected, []);
+  assert.equal(
+    ui.nodes("ModelMenu").some((node) => node.type === "continued-input"),
+    false,
+  );
 });

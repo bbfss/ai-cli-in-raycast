@@ -486,7 +486,7 @@ test("successful inline repair invokes onSaved instead of popping another view",
   assert.equal(ui.writes.length, 1);
 });
 
-test("each CLI settings row opens its own defaults first and retains preferences, path copy and detection", async (t) => {
+function settingsHost(t) {
   const { PROVIDERS } = require("../src/session-storage.ts");
   const definitions = PROVIDERS.map((entry) => ({
     id: entry.id,
@@ -494,8 +494,15 @@ test("each CLI settings row opens its own defaults first and retains preferences
     preference: entry.id,
   }));
   const slots = [];
+  const pendingEffects = [];
+  const cleanups = new Map();
+  const launched = [],
+    toasts = [];
   let cursor = 0,
-    mountEffect;
+    unmounted = false,
+    lateUpdates = 0,
+    scans = 0;
+  let launchHandler = async () => undefined;
   const react = {
     useRef(value) {
       const id = cursor++;
@@ -508,13 +515,20 @@ test("each CLI settings row opens its own defaults first and retains preferences
       return [
         slots[id],
         (next) => {
+          if (unmounted) lateUpdates++;
           slots[id] = typeof next === "function" ? next(slots[id]) : next;
         },
       ];
     },
-    useEffect(fn) {
-      cursor++;
-      mountEffect = fn;
+    useEffect(fn, deps) {
+      const id = cursor++;
+      if (
+        !slots[id] ||
+        deps.some((value, index) => value !== slots[id][index])
+      ) {
+        slots[id] = deps;
+        pendingEffects.push({ id, fn });
+      }
     },
   };
   const jsx = (type, props) => ({ type, props });
@@ -539,8 +553,15 @@ test("each CLI settings row opens its own defaults first and retains preferences
     Color: {},
     Icon: {},
     Keyboard: { Shortcut: { Common: {} } },
-    Toast: { Style: {} },
-    showToast: async () => {},
+    Toast: { Style: { Failure: "failure" } },
+    LaunchType: { UserInitiated: "user" },
+    launchCommand: async (options) => {
+      launched.push(options);
+      return launchHandler(options);
+    },
+    showToast: async (options) => {
+      toasts.push(options);
+    },
     openExtensionPreferences() {},
   };
   const filename = path.resolve(__dirname, "../src/cli-settings.tsx");
@@ -551,12 +572,15 @@ test("each CLI settings row opens its own defaults first and retains preferences
     if (id === "react") return react;
     if (id === "react/jsx-runtime") return { jsx, jsxs: jsx };
     if (id === "./i18n") return require("../src/i18n.ts");
+    if (id === "./command-routing") return require("../src/command-routing.ts");
+    if (id === "./conversations") return require("../src/conversations.ts");
     if (id === "./model-settings") return { ModelSettings: "defaults" };
     if (id === "./cli-detection")
       return {
         CLI_DEFINITIONS: definitions,
         CliDetectionController: class {
           async scan(_preferences, emit) {
+            scans++;
             for (const entry of definitions)
               emit({
                 provider: entry.id,
@@ -585,7 +609,12 @@ test("each CLI settings row opens its own defaults first and retains preferences
   );
   const render = () => {
     cursor = 0;
-    return loaded.exports.default();
+    const tree = loaded.exports.default();
+    for (const { id, fn } of pendingEffects.splice(0)) {
+      cleanups.get(id)?.();
+      cleanups.set(id, fn());
+    }
+    return tree;
   };
   const nodes = (node) =>
     !node || typeof node !== "object"
@@ -596,21 +625,87 @@ test("each CLI settings row opens its own defaults first and retains preferences
             .flat(Infinity)
             .flatMap(nodes),
         ];
-  render();
-  const cleanup = mountEffect();
-  t.after(cleanup);
-  await new Promise(setImmediate);
-  const rows = nodes(render()).filter(
-    (node) => node.type === api.List.Item && node.props.id !== "preferences",
-  );
-  assert.equal(rows.length, 6);
-  for (const row of rows) {
-    const actions = nodes(row.props.actions).filter((node) =>
+  const rows = () =>
+    nodes(render()).filter(
+      (node) => node.type === api.List.Item && node.props.id !== "preferences",
+    );
+  const actions = (row) =>
+    nodes(row.props.actions).filter((node) =>
       [Action, "push", "copy"].includes(node.type),
     );
-    assert.equal(actions[0].type, "push");
-    assert.equal(actions[0].props.target.type, "defaults");
-    assert.equal(actions[0].props.target.props.provider, row.props.id);
+  const unmount = () => {
+    if (unmounted) return;
+    unmounted = true;
+    for (const cleanup of cleanups.values()) cleanup?.();
+    cleanups.clear();
+  };
+  t.after(unmount);
+  render();
+  return {
+    render,
+    rows,
+    actions,
+    nodes,
+    launched,
+    toasts,
+    unmount,
+    async flush() {
+      await new Promise(setImmediate);
+      render();
+    },
+    failLaunch(message) {
+      launchHandler = async () => {
+        throw new Error(message);
+      };
+    },
+    deferLaunch() {
+      let resolve, reject;
+      const pending = new Promise((yes, no) => {
+        resolve = yes;
+        reject = no;
+      });
+      launchHandler = () => pending;
+      return { resolve, reject };
+    },
+    get lateUpdates() {
+      return lateUpdates;
+    },
+    get scans() {
+      return scans;
+    },
+  };
+}
+
+test("CLI settings lists six command entries before preferences, with defaults second and utilities retained", async (t) => {
+  const ui = settingsHost(t);
+  await ui.flush();
+  const sections = ui.render().props.children.flat(Infinity);
+  assert.deepEqual(
+    sections.map((node) => node.props.title),
+    ["Local AI CLI", "Preferences"],
+  );
+  const rows = ui.rows();
+  assert.equal(rows.length, 6);
+  const expected = {
+    codex: "index",
+    antigravity: "antigravity",
+    qoder: "qoder",
+    "qoder-cn": "qoder-cn",
+    workbuddy: "workbuddy",
+    gemini: "gemini",
+  };
+  for (const row of rows) {
+    const actions = ui.actions(row);
+    assert.equal(typeof actions[0].props.onAction, "function");
+    assert.match(actions[0].props.title, /^Open /);
+    await actions[0].props.onAction();
+    assert.deepEqual(ui.launched.at(-1), {
+      name: expected[row.props.id],
+      type: "user",
+    });
+    assert.equal(actions[1].type, "push");
+    assert.equal(actions[1].props.target.type, "defaults");
+    assert.equal(actions[1].props.target.props.provider, row.props.id);
     assert.ok(
       actions.some(
         (node) => node.props.title === "Language and CLI Preferences",
@@ -619,4 +714,62 @@ test("each CLI settings row opens its own defaults first and retains preferences
     assert.ok(actions.some((node) => node.props.title === "Copy CLI Path"));
     assert.ok(actions.some((node) => node.props.title === "Detect CLIs Again"));
   }
+  assert.equal(ui.launched.length, 6);
+  assert.deepEqual(ui.toasts, []);
+  const refresh = ui
+    .actions(rows[0])
+    .find((node) => node.props.title === "Detect CLIs Again");
+  refresh.props.onAction();
+  await ui.flush();
+  assert.equal(ui.scans, 2);
+});
+
+test("a disabled CLI launch stays in settings and explains how to enable the command", async (t) => {
+  const ui = settingsHost(t);
+  await ui.flush();
+  ui.failLaunch("The command is disabled");
+  await assert.doesNotReject(ui.actions(ui.rows()[0])[0].props.onAction());
+  assert.deepEqual(ui.launched, [{ name: "index", type: "user" }]);
+  assert.equal(ui.toasts.length, 1);
+  assert.equal(ui.toasts[0].style, "failure");
+  assert.equal(ui.toasts[0].title, "Could Not Open Command");
+  assert.match(ui.toasts[0].message, /Enable this command in Raycast Settings/);
+  assert.equal(ui.rows().length, 6);
+  assert.equal(ui.render().props.isLoading, false);
+});
+
+test("a pending settings launch synchronously blocks another command and unlocks when finished", async (t) => {
+  const ui = settingsHost(t);
+  await ui.flush();
+  const rows = ui.rows();
+  const first = ui.actions(rows[0])[0].props.onAction;
+  const second = ui.actions(rows[1])[0].props.onAction;
+  const gate = ui.deferLaunch();
+  const pending = first();
+  await second();
+  assert.deepEqual(ui.launched, [{ name: "index", type: "user" }]);
+  assert.equal(ui.render().props.isLoading, true);
+  gate.resolve();
+  await pending;
+  assert.equal(ui.render().props.isLoading, false);
+  await second();
+  assert.deepEqual(ui.launched, [
+    { name: "index", type: "user" },
+    { name: "antigravity", type: "user" },
+  ]);
+});
+
+test("leaving settings suppresses late launch errors and stale launch callbacks", async (t) => {
+  const ui = settingsHost(t);
+  await ui.flush();
+  const open = ui.actions(ui.rows()[0])[0].props.onAction;
+  const gate = ui.deferLaunch();
+  const pending = open();
+  ui.unmount();
+  gate.reject(new Error("The command is disabled"));
+  await pending;
+  await open();
+  assert.deepEqual(ui.launched, [{ name: "index", type: "user" }]);
+  assert.deepEqual(ui.toasts, []);
+  assert.equal(ui.lateUpdates, 0);
 });

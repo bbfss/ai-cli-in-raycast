@@ -1,5 +1,15 @@
 # AI CLI in Raycast
 
+## [Continue Input and Speaker Avatars] - 2026-10-21
+
+- Keep message entry open and focused after choosing a model or effort, sharing the original draft and send guards through lazy native submenu branches.
+- Preserve the active input branch during catalog refreshes while hiding stale choices; release lazy branches when reopening a picker or the root input.
+- Add the current provider logo to message-entry and send actions. The Windows footer remains host-controlled and does not display the supplied icon.
+- Add the small person avatar beside “You” in the transcript, aligned with the AI speaker headings. Preserve original stored/copied text.
+- List CLI commands before Preferences inside CLI Settings, with direct chat launch as the first action and model defaults second. Keep the native extension preference page's host-controlled order.
+- Retire callbacks when a picker is reopened or unmounted so an old branch cannot reset or overwrite a newer draft.
+- Pass 290 tests, TypeScript, lint and build. Verify a native model → input → effort → input sequence with retained draft and keyboard focus; separately check the human avatar and CLI Settings order.
+
 ## [Live Model Controls and Defaults] - 2026-10-21
 
 - Add separate model and effort menus to the input popover; refresh the current CLI catalog each time the input or either menu opens. Hide stale choices during failures/loading and validate choices again before each reply.

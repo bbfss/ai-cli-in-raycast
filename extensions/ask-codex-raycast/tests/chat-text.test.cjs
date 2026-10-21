@@ -43,7 +43,11 @@ test("latest exchange comes first while every question stays before its answer",
   assert.ok(output.indexOf("Next answer") < output.indexOf("First question"));
   assert.ok(output.indexOf("First question") < output.indexOf("First answer"));
   assert.equal(output.split("\n\n---\n\n").length, 2);
-  assert.ok(!output.includes("!["));
+  assert.match(
+    output,
+    /<sub>!\[You\]\(<file:\/\/.*user-avatar\.svg\?raycast-width=18&raycast-height=18>\)<\/sub> \*\*You\*\*/,
+  );
+  assert.doesNotMatch(output, /!\[Codex\]/);
   assert.equal(JSON.stringify(messages), before);
 });
 
@@ -167,7 +171,10 @@ test("simple exchange separators stay distinct from assistant-generated rules", 
   ];
   const raw = JSON.stringify(messages);
   const output = conversationMarkdown(messages, "/assets", "", "", "Codex");
-  assert.match(output, /^\*\*You\*\*\n\n> Second question/);
+  assert.match(
+    output,
+    /^<sub>!\[You\].*<\/sub> \*\*You\*\*\n\n> Second question/,
+  );
   assert.match(output, /\*\*Codex\*\*/);
   assert.equal(output.match(/^---$/gm).length, 1);
   assert.doesNotMatch(output, /^\*\*\*$/m);

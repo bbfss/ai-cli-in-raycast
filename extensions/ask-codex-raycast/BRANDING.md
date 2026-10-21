@@ -10,8 +10,9 @@ distinct command names.
 Native Antigravity model `gemini-3.8-flash-high` generated two SVG proposals on
 2026-10-21. Proposal A was selected, and Resvg mechanically rendered its SVG
 unchanged to PNG. Resvg is an authoring tool, not an extension dependency.
-The earlier suite, command and avatar assets are retained as legacy files;
-they are not the active manifest/launcher branding.
+The earlier suite, command and CLI avatar assets are retained as legacy files;
+they are not the active manifest/launcher branding. The generic human glyph
+`assets/user-avatar.svg` is active beside user-message role labels.
 
 The attempted Magpie Gemini route returned HTTP 402. The successful SVG work
 used native Antigravity; it was not a Magpie image-generation request. Two
@@ -45,3 +46,10 @@ The provider filenames are exported by `PROVIDER_ICONS` / `providerIcon` in
 `src/provider.ts`, so chat headings or message avatars can use the same assets.
 The suite's Gemini-generated single-bubble logo remains distinct from these
 provider identifiers. Store publication remains withdrawn.
+
+## Human message avatar
+
+`assets/user-avatar.svg` is the existing generic head-and-shoulders glyph from
+this project. It identifies the human speaker beside “You” in the transcript,
+rather than a provider or send button. It uses the same 18px inline `<sub>`
+alignment as the AI headings. It is not a personal photo or generated brand mark.

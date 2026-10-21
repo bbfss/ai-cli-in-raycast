@@ -25,13 +25,15 @@ export function conversationMarkdown(
 ) {
   // Keep the latest exchange in view without reversing question/answer order.
   // Steering and multiple assistant items stay in their original turn order.
-  const avatar = assistantIcon
-    ? pathToFileURL(join(assetsPath, assistantIcon))
-    : null;
-  if (avatar) avatar.search = "raycast-width=18&raycast-height=18";
   // Inline images otherwise sit above the text baseline. Standard subscript
-  // positioning and an 18px icon align the mark with the provider name.
-  const speaker = `${avatar ? `<sub>![${assistant}](<${avatar.href}>)</sub> ` : ""}**${assistant}**`;
+  // positioning and an 18px icon align both roles with their names.
+  function avatar(file: string, label: string) {
+    const url = pathToFileURL(join(assetsPath, file));
+    url.search = "raycast-width=18&raycast-height=18";
+    return `<sub>![${label}](<${url.href}>)</sub> `;
+  }
+  const speaker = `${assistantIcon ? avatar(assistantIcon, assistant) : ""}**${assistant}**`;
+  const userAvatar = avatar("user-avatar.svg", t("You"));
   const cards = conversationGroups(messages).map((round) =>
     round
       .map((message, index) => {
@@ -46,7 +48,7 @@ export function conversationMarkdown(
             message.kind === "steer" ? t("Additional Instructions") : t("You");
           // Quote every line so multiline prompts and fenced code remain a
           // single, readable question block in Raycast's native Markdown.
-          return `**${label}**\n\n${body
+          return `${userAvatar}**${label}**\n\n${body
             .split("\n")
             .map((line) => `> ${line}`)
             .join("\n")}`;

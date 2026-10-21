@@ -299,6 +299,10 @@ function chat(t, provider = "antigravity", initialDraft = "", options = {}) {
     providers: () => find("providers"),
     models: () => find("models"),
     efforts: () => find("efforts"),
+    allModelControls: () =>
+      nodes(render()).filter(
+        (node) => node.type === "models" || node.type === "efforts",
+      ),
     controls: () => nodes(find("composer").controls),
     async flush() {
       for (let n = 0; n < 4; n++) {
@@ -1168,3 +1172,30 @@ test("native fixed mode overrides stored last mode and requires choosing its fix
   assert.equal(ui.input().draft, "keep this until fixed model is set");
   assert.match(ui.toasts.at(-1).message, /fixed model/);
 });
+
+for (const provider of [
+  "codex",
+  "antigravity",
+  "qoder",
+  "qoder-cn",
+  "workbuddy",
+  "gemini",
+]) {
+  test(`${provider} main and popup menus use one composer input handle and the matching send icon`, async (t) => {
+    const ui = chat(t, provider);
+    await ui.ready();
+    const input = ui.input();
+    assert.equal(input.sendIcon, `provider-${provider}.png`);
+    assert.ok(input.inputRef);
+    const menus = ui.allModelControls();
+    assert.equal(menus.length, 4);
+    assert.ok(menus.every((node) => node.props.inputRef === input.inputRef));
+    assert.equal(
+      ui
+        .controls()
+        .filter((node) => node.type === "models" || node.type === "efforts")
+        .length,
+      2,
+    );
+  });
+}

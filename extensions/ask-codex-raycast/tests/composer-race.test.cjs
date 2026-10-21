@@ -15,6 +15,7 @@ function composer(t, onSend = async () => true, options = {}) {
     cleanup,
     stopped = 0;
   const react = {
+    Fragment: "fragment",
     useRef(value) {
       const id = cursor++;
       if (!(id in slots)) slots[id] = { current: value };
@@ -35,7 +36,7 @@ function composer(t, onSend = async () => true, options = {}) {
       effect = fn;
     },
   };
-  const jsx = (type, props) => ({ type, props });
+  const jsx = (type, props, key) => ({ type, props, key });
   const Action = Object.assign(() => {}, { CopyToClipboard: "copy" });
   const api = {
     Action,
@@ -51,7 +52,8 @@ function composer(t, onSend = async () => true, options = {}) {
   loaded.filename = filename;
   loaded.require = (id) => {
     if (id === "react") return react;
-    if (id === "react/jsx-runtime") return { jsx, jsxs: jsx };
+    if (id === "react/jsx-runtime")
+      return { jsx, jsxs: jsx, Fragment: "fragment" };
     if (id === "@raycast/api") return api;
     if (id === "./i18n") return require("../src/i18n.ts");
     throw new Error("Unexpected component dependency: " + id);
@@ -86,6 +88,7 @@ function composer(t, onSend = async () => true, options = {}) {
     return loaded.exports.MessageComposer(props);
   }
   function nodes(node) {
+    if (Array.isArray(node)) return node.flatMap(nodes);
     return !node || typeof node !== "object"
       ? []
       : [node, ...[node.props?.children].flat(Infinity).flatMap(nodes)];
@@ -119,6 +122,11 @@ function composer(t, onSend = async () => true, options = {}) {
     },
     title: () => render().props.title,
     primary: () => actions()[0].props.title,
+    primaryIcon: () => actions()[0].props.icon,
+    sharedNodes() {
+      render();
+      return nodes(props.inputRef.current.content());
+    },
     preview: () =>
       nodes(render()).find((node) => node.type === "section").props.title,
     nodes: () => nodes(render()),
@@ -400,4 +408,132 @@ test("saved draft preview occupies one action row and truncates at 90 Unicode co
   );
   await ui.send();
   assert.equal(sent, raw);
+});
+
+test("shared input continuation preserves the draft without sending, clearing or refreshing it", async (t) => {
+  const sent = [];
+  const inputRef = { current: null };
+  let refreshed = 0;
+  const ui = composer(
+    t,
+    async (text) => {
+      sent.push(text);
+      return false;
+    },
+    {
+      inputRef,
+      sendIcon: "provider-gemini.png",
+      onRefreshModels: () => refreshed++,
+    },
+  );
+  ui.open();
+  assert.equal(
+    ui.nodes().find((node) => node.type === "submenu").props.icon,
+    "provider-gemini.png",
+  );
+  ui.type("draft before selecting a model  ");
+  const handle = inputRef.current;
+  handle.open();
+  handle.onSearchTextChange("");
+  assert.equal(ui.draft, "draft before selecting a model  ");
+  assert.deepEqual(sent, []);
+  assert.equal(refreshed, 1);
+  assert.match(
+    ui.primary(),
+    /^Send Saved Draft: draft before selecting a model/,
+  );
+  inputRef.current.onSearchTextChange("continued through the model submenu  ");
+  const sharedSend = ui
+    .sharedNodes()
+    .find(
+      (node) =>
+        typeof node.props?.onAction === "function" &&
+        node.props.title === "Send Message",
+    );
+  assert.equal(sharedSend.props.icon, "provider-gemini.png");
+  await sharedSend.props.onAction();
+  assert.deepEqual(sent, ["continued through the model submenu  "]);
+  assert.equal(ui.draft, "continued through the model submenu  ");
+  await ui.send();
+  assert.deepEqual(sent, [
+    "continued through the model submenu  ",
+    "continued through the model submenu  ",
+  ]);
+});
+
+test("clearing through shared input remains discarded when another selection resumes input", (t) => {
+  const inputRef = { current: null };
+  const ui = composer(t, undefined, {
+    inputRef,
+    draft: "discard this saved draft",
+  });
+  ui.open();
+  ui.sharedNodes()
+    .find((node) => node.props?.title === "Clear Draft")
+    .props.onAction();
+  inputRef.current.open();
+  inputRef.current.onSearchTextChange("");
+  assert.equal(ui.draft, "");
+  assert.equal(ui.primary(), "Send Message");
+});
+
+test("root opening resets lazy controls while continuation keeps the active controls generation", (t) => {
+  const inputRef = { current: null };
+  const controls = { type: "model-effort-controls", props: {} };
+  const ui = composer(t, undefined, { inputRef, controls });
+  ui.open();
+  const key = () =>
+    ui
+      .nodes()
+      .find(
+        (node) => node.type === "fragment" && node.props.children === controls,
+      ).key;
+  const first = key();
+  inputRef.current.open();
+  assert.equal(key(), first);
+  ui.open();
+  assert.notEqual(key(), first);
+});
+
+test("shared input and send actions share pending-send and newer-draft protection", async (t) => {
+  const inputRef = { current: null };
+  let accept;
+  const sent = [];
+  const ui = composer(
+    t,
+    (text) => {
+      sent.push(text);
+      return new Promise((resolve) => {
+        accept = resolve;
+      });
+    },
+    { inputRef },
+  );
+  ui.open();
+  ui.type("pending original");
+  const pending = ui.send();
+  inputRef.current.open();
+  inputRef.current.onSearchTextChange("");
+  inputRef.current.onSearchTextChange("new shared draft");
+  const sharedSend = ui
+    .sharedNodes()
+    .find((node) => node.props?.title === "Send Message");
+  await sharedSend.props.onAction();
+  assert.deepEqual(sent, ["pending original"]);
+  accept(true);
+  await pending;
+  assert.equal(ui.draft, "new shared draft");
+  assert.equal(ui.primary(), "Send Message");
+});
+
+test("unmount retires the shared handle and ignores late continuation callbacks", (t) => {
+  const inputRef = { current: null };
+  const ui = composer(t, undefined, { inputRef, draft: "preserved draft" });
+  ui.open();
+  const handle = inputRef.current;
+  ui.unmount();
+  assert.equal(inputRef.current, null);
+  handle.open();
+  handle.onSearchTextChange("late input must not win");
+  assert.equal(ui.draft, "preserved draft");
 });

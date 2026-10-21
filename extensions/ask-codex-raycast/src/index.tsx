@@ -45,7 +45,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { type CodexEvent, type CodexModel, type ModelSelection } from "./codex";
 import { useSessionHistory, type Page } from "./history";
 import { conversationMarkdown } from "./chat-text";
-import { MessageComposer } from "./message-composer";
+import { MessageComposer, type ComposerInput } from "./message-composer";
 import { ModelMenu, EffortMenu } from "./model-menu";
 import {
   asRecord,
@@ -289,6 +289,7 @@ function NativeChat(
     effort: "",
   });
   const modelSelectionRef = useRef<ModelSelection | null>(null);
+  const composerInputRef = useRef<ComposerInput | null>(null);
   const modelPolicyRef = useRef<ModelPolicy>({ mode: "last", selection: null });
   const modelsRef = useRef<CodexModel[]>([]);
   const modelsRequestRef = useRef<Promise<CodexModel[]> | null>(null);
@@ -429,7 +430,7 @@ function NativeChat(
       requestPendingRef.current ||
       switching
     )
-      return;
+      return false;
     // "Use current" remembers the actual model, rather than persisting null
     // and silently returning to the CLI default when a new chat is opened.
     selection = selection || clientRef.current?.currentModelSelection || null;
@@ -444,7 +445,7 @@ function NativeChat(
           "The selected model or effort level is no longer available. Please reselect a model in Actions at the bottom.",
         ),
       });
-      return;
+      return false;
     }
     rememberModelSelection(selection);
     void showToast({
@@ -466,6 +467,7 @@ function NativeChat(
             )
           : t("This setting applies to the next message."),
     });
+    return true;
   }
 
   useEffect(() => {
@@ -1190,6 +1192,7 @@ function NativeChat(
     onNew: newChat,
   });
   const modelMenuProps = {
+    inputRef: composerInputRef,
     allowCurrent: props.provider === "codex",
     models,
     selection: modelSelection,
@@ -1261,6 +1264,8 @@ function NativeChat(
               .join(" · ")}
           >
             <MessageComposer
+              inputRef={composerInputRef}
+              sendIcon={providerIcon(props.provider)}
               draft={draft}
               busy={busy}
               canSteer={capabilities.supportsSteering}

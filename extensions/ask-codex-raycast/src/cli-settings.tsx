@@ -5,6 +5,8 @@ import {
   getPreferenceValues,
   Icon,
   Keyboard,
+  launchCommand,
+  LaunchType,
   List,
   openExtensionPreferences,
   showToast,
@@ -16,6 +18,8 @@ import {
   CliDetectionController,
   type CliDetectionResult,
 } from "./cli-detection";
+import { PROVIDER_COMMANDS } from "./command-routing";
+import { messageOf } from "./conversations";
 import { setLanguage, t } from "./i18n";
 import { ModelSettings } from "./model-settings";
 
@@ -35,8 +39,17 @@ export default function CliSettings() {
     {},
   );
   const [checking, setChecking] = useState(false);
+  const [launching, setLaunching] = useState(false);
   const [refreshId, setRefreshId] = useState(0);
+  const launchPending = useRef(false);
+  const mountedRef = useRef(true);
   const controller = useRef(new CliDetectionController());
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   useEffect(() => {
     let mounted = true;
     setChecking(true);
@@ -62,6 +75,29 @@ export default function CliSettings() {
     };
   }, [refreshId]);
 
+  async function openCommand(name: string) {
+    if (!mountedRef.current || launchPending.current) return;
+    launchPending.current = true;
+    setLaunching(true);
+    try {
+      await launchCommand({ name, type: LaunchType.UserInitiated });
+    } catch (reason) {
+      if (mountedRef.current)
+        await showToast({
+          style: Toast.Style.Failure,
+          title: t("Could Not Open Command"),
+          message: /disabled|no enabled command/i.test(messageOf(reason))
+            ? t(
+                "Enable this command in Raycast Settings → Extensions, then try again.",
+              )
+            : messageOf(reason),
+        });
+    } finally {
+      launchPending.current = false;
+      if (mountedRef.current) setLaunching(false);
+    }
+  }
+
   const preferencesAction = (
     <Action
       title={t("Language and CLI Preferences")}
@@ -81,33 +117,9 @@ export default function CliSettings() {
     <List
       navigationTitle={t("AI CLI in Raycast Settings")}
       searchBarPlaceholder={t("Find a CLI or setting…")}
-      isLoading={checking}
+      isLoading={checking || launching}
       isShowingDetail
     >
-      <List.Section title={t("Preferences")}>
-        <List.Item
-          id="preferences"
-          title={t("Preferences")}
-          icon={Icon.Gear}
-          detail={
-            <List.Item.Detail
-              markdown={[
-                `### ${t("Preferences")}`,
-                t("Set language, CLI detection, paths, and permissions."),
-                t(
-                  "Enable or disable commands in Raycast Settings → Extensions.",
-                ),
-              ].join("\n\n")}
-            />
-          }
-          actions={
-            <ActionPanel>
-              {preferencesAction}
-              {refreshAction}
-            </ActionPanel>
-          }
-        />
-      </List.Section>
       <List.Section title={t("Local AI CLI")}>
         {CLI_DEFINITIONS.map((entry) => {
           const result = results[entry.id];
@@ -194,6 +206,11 @@ export default function CliSettings() {
               }
               actions={
                 <ActionPanel>
+                  <Action
+                    title={t("Open {provider}", { provider: entry.label })}
+                    icon={Icon.ArrowRight}
+                    onAction={() => openCommand(PROVIDER_COMMANDS[entry.id])}
+                  />
                   <Action.Push
                     title={t("Model and Effort Defaults")}
                     icon={Icon.ComputerChip}
@@ -212,6 +229,30 @@ export default function CliSettings() {
             />
           );
         })}
+      </List.Section>
+      <List.Section title={t("Preferences")}>
+        <List.Item
+          id="preferences"
+          title={t("Preferences")}
+          icon={Icon.Gear}
+          detail={
+            <List.Item.Detail
+              markdown={[
+                `### ${t("Preferences")}`,
+                t("Set language, CLI detection, paths, and permissions."),
+                t(
+                  "Enable or disable commands in Raycast Settings → Extensions.",
+                ),
+              ].join("\n\n")}
+            />
+          }
+          actions={
+            <ActionPanel>
+              {preferencesAction}
+              {refreshAction}
+            </ActionPanel>
+          }
+        />
       </List.Section>
     </List>
   );
