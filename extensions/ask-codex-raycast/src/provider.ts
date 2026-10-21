@@ -53,7 +53,6 @@ export function providerCapabilities(provider: ProviderId) {
   return {
     label: PROVIDER_LABELS[provider],
     supportsSteering: provider === "codex",
-    supportsEffort: provider === "codex",
   };
 }
 export function createProviderClient(

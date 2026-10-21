@@ -8,10 +8,22 @@ import {
   type ChatClient,
 } from "./provider";
 import { ProviderMenu } from "./provider-menu";
-import { PROVIDERS, storageKeys } from "./session-storage";
+import {
+  PROVIDERS,
+  storageKeys,
+  resolveModelPolicy,
+  modelPolicyPreference,
+  type ModelPolicy,
+} from "./session-storage";
 import { PROVIDER_COMMANDS, providerForCommand } from "./command-routing";
 import { SetupWizard } from "./setup";
-import { connectionSignature, parseSetup, type Setup } from "./setup-state";
+import { ModelSettings } from "./model-settings";
+import {
+  connectionSignature,
+  parseSetup,
+  validSelection,
+  type Setup,
+} from "./setup-state";
 import {
   Action,
   ActionPanel,
@@ -60,6 +72,7 @@ export default function AIInRaycast(
   setLanguage(preferences.uiLanguage);
   const provider = providerForCommand(environment.commandName);
   const signature = connectionSignature(preferences, provider);
+  const modelStrategy = preferences[modelPolicyPreference(provider)];
   const launchConsumed = useRef(false);
   async function changeProvider(value: string) {
     if (!isProviderId(value) || value === provider) return;
@@ -78,7 +91,7 @@ export default function AIInRaycast(
   }
   return (
     <ConfiguredCommand
-      key={`${provider}:${signature}`}
+      key={`${provider}:${signature}:${modelStrategy || "saved"}`}
       provider={provider}
       onProviderChange={changeProvider}
       launch={props}
@@ -107,6 +120,10 @@ function ConfiguredCommand({
   const [savedSelection, setSavedSelection] = useState<ModelSelection | null>(
     null,
   );
+  const [modelPolicy, setModelPolicy] = useState<ModelPolicy>({
+    mode: "last",
+    selection: null,
+  });
   const [editing, setEditing] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -116,6 +133,11 @@ function ConfiguredCommand({
       setLoadError("");
       const saved = parseSetup(await LocalStorage.getItem<string>(keys.setup));
       const rawSelection = await LocalStorage.getItem<string>(keys.model);
+      const policy = resolveModelPolicy(
+        await LocalStorage.getItem<string>(keys.modelPolicy),
+        provider,
+        preferences,
+      );
       let selection: ModelSelection | null = null;
       try {
         const parsed = JSON.parse(rawSelection || "null");
@@ -129,6 +151,7 @@ function ConfiguredCommand({
       }
       if (cancelled) return;
       setSetup(saved);
+      setModelPolicy(policy);
       setSavedSelection(selection);
       setLoaded(true);
     }
@@ -169,9 +192,40 @@ function ConfiguredCommand({
         previous={setup}
         selection={savedSelection}
         onComplete={(value) => {
-          setSetup(value);
-          setSavedSelection(value.selection);
-          setEditing(false);
+          void (async () => {
+            // An explicit setup choice also sets the fixed default, without
+            // asking for the same model again in a second settings form.
+            if (modelPolicy.mode === "fixed") {
+              const fixed: ModelPolicy = {
+                mode: "fixed",
+                selection: value.selection,
+              };
+              await LocalStorage.setItem(
+                keys.modelPolicy,
+                JSON.stringify(fixed),
+              );
+              setModelPolicy(fixed);
+            }
+            setSetup(value);
+            setSavedSelection(value.selection);
+            setEditing(false);
+          })().catch((reason) =>
+            showToast({
+              style: Toast.Style.Failure,
+              title: t("Could not save settings"),
+              message: messageOf(reason),
+            }),
+          );
+        }}
+      />
+    );
+  if (modelPolicy.mode === "fixed" && !modelPolicy.selection)
+    return (
+      <ModelSettings
+        provider={provider}
+        onSaved={() => {
+          setLoaded(false);
+          setAttempt((value) => value + 1);
         }}
       />
     );
@@ -235,6 +289,7 @@ function NativeChat(
     effort: "",
   });
   const modelSelectionRef = useRef<ModelSelection | null>(null);
+  const modelPolicyRef = useRef<ModelPolicy>({ mode: "last", selection: null });
   const modelsRef = useRef<CodexModel[]>([]);
   const modelsRequestRef = useRef<Promise<CodexModel[]> | null>(null);
   const modelSaveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -327,7 +382,11 @@ function NativeChat(
     if (modelsRequestRef.current) return modelsRequestRef.current;
     setModelsLoading(true);
     setModelsError("");
-    const request = client.listModels();
+    // A refresh is a new availability check, not permission to keep choosing
+    // an older catalog while the CLI is loading or has failed.
+    modelsRef.current = [];
+    setModels([]);
+    const request = Promise.resolve().then(() => client.listModels());
     modelsRequestRef.current = request;
     try {
       const catalog = await request;
@@ -347,12 +406,13 @@ function NativeChat(
     }
   }
 
-  function selectModel(selection: ModelSelection | null) {
-    modelSelectionRef.current = selection;
-    setModelSelection(selection);
+  function rememberModelSelection(selection: ModelSelection) {
+    modelSelectionRef.current = { ...selection };
+    setModelSelection({ ...selection });
+    const encoded = JSON.stringify(selection);
     modelSaveQueueRef.current = modelSaveQueueRef.current
       .catch(() => undefined)
-      .then(() => LocalStorage.setItem(keys.model, JSON.stringify(selection)));
+      .then(() => LocalStorage.setItem(keys.model, encoded));
     void modelSaveQueueRef.current.catch((reason) =>
       showToast({
         style: Toast.Style.Failure,
@@ -360,6 +420,33 @@ function NativeChat(
         message: messageOf(reason),
       }),
     );
+  }
+
+  function selectModel(selection: ModelSelection | null) {
+    if (
+      !mountedRef.current ||
+      !readyRef.current ||
+      requestPendingRef.current ||
+      switching
+    )
+      return;
+    // "Use current" remembers the actual model, rather than persisting null
+    // and silently returning to the CLI default when a new chat is opened.
+    selection = selection || clientRef.current?.currentModelSelection || null;
+    if (
+      modelsRequestRef.current ||
+      !selection ||
+      !validSelection(modelsRef.current, selection)
+    ) {
+      void showToast({
+        style: Toast.Style.Failure,
+        title: t(
+          "The selected model or effort level is no longer available. Please reselect a model in Actions at the bottom.",
+        ),
+      });
+      return;
+    }
+    rememberModelSelection(selection);
     void showToast({
       style: Toast.Style.Success,
       title: selection
@@ -509,6 +596,11 @@ function NativeChat(
       await saveQueueRef.current.catch(() => undefined);
       await modelSaveQueueRef.current.catch(() => undefined);
       const savedModel = await LocalStorage.getItem<string>(keys.model);
+      const policy = resolveModelPolicy(
+        await LocalStorage.getItem<string>(keys.modelPolicy),
+        props.provider,
+        preferences,
+      );
       let selection: ModelSelection | null = null;
       try {
         const saved = asRecord(savedModel ? JSON.parse(savedModel) : null);
@@ -521,6 +613,8 @@ function NativeChat(
         /* A malformed picker preference must not prevent opening chat. */
       }
       if (disposed) return;
+      modelPolicyRef.current = policy;
+      if (policy.mode === "fixed") selection = policy.selection;
       modelSelectionRef.current = selection;
       setModelSelection(selection);
       const library = parseLibrary(
@@ -672,15 +766,22 @@ function NativeChat(
         if (client.currentTurnId) throw reason;
       }
     }
+    if (
+      modelPolicyRef.current.mode === "fixed" &&
+      !modelPolicyRef.current.selection
+    )
+      throw new Error(
+        t("Choose a fixed model and effort in CLI Settings first."),
+      );
     if (selection) {
-      const catalog = modelsRef.current.length
-        ? modelsRef.current
-        : await refreshModels();
-      const model = catalog.find((item) => item.model === selection.model);
+      const catalog = await refreshModels();
       if (
-        !model ||
-        (selection.effort && !model.efforts.includes(selection.effort))
-      ) {
+        !mountedRef.current ||
+        clientRef.current !== client ||
+        !readyRef.current
+      )
+        throw new Error(t("Service not connected. Please reopen the command."));
+      if (!validSelection(catalog, selection)) {
         throw new Error(
           t(
             "The selected model or effort level is no longer available. Please reselect a model in Actions at the bottom.",
@@ -709,7 +810,11 @@ function NativeChat(
     }));
     try {
       await client.startTurn(prompt, selection);
-      if (mountedRef.current) setCurrentModel(client.currentModelSelection);
+      if (mountedRef.current && clientRef.current === client) {
+        setCurrentModel(client.currentModelSelection);
+        if (!selection && client.currentModelSelection.model)
+          rememberModelSelection(client.currentModelSelection);
+      }
     } catch (reason) {
       setBusy(false);
       setConversation((previous) => ({
@@ -816,7 +921,19 @@ function NativeChat(
       if (!client || !readyRef.current)
         throw new Error(t("Service not connected"));
       if (persistedRef.current) save(persistedRef.current);
+      if (
+        modelPolicyRef.current.mode === "last" &&
+        !modelSelectionRef.current &&
+        client.currentModelSelection.model
+      )
+        rememberModelSelection(client.currentModelSelection);
       const threadId = await client.startThread();
+      if (!mountedRef.current || clientRef.current !== client) return;
+      if (modelPolicyRef.current.mode === "fixed") {
+        const fixed = modelPolicyRef.current.selection;
+        modelSelectionRef.current = fixed;
+        setModelSelection(fixed);
+      }
       setCurrentModel(client.currentModelSelection);
       const next = {
         threadId,
@@ -1079,7 +1196,7 @@ function NativeChat(
     current: currentModel,
     loading: modelsLoading,
     error: modelsError,
-    ready,
+    ready: ready && !switching,
     onRefresh: () => void refreshModels().catch(() => undefined),
     onSelect: selectModel,
   };
@@ -1119,7 +1236,7 @@ function NativeChat(
         }}
       />
       <ModelMenu {...modelMenuProps} shortcuts={shortcuts} />
-      {capabilities.supportsEffort && <EffortMenu {...modelMenuProps} />}
+      <EffortMenu {...modelMenuProps} shortcuts={shortcuts} />
       <Action
         title={t("New Chat")}
         icon={Icon.Plus}
@@ -1151,6 +1268,13 @@ function NativeChat(
               onChange={editDraft}
               onSend={sendPrompt}
               onStop={stopResponse}
+              onRefreshModels={modelMenuProps.onRefresh}
+              controls={
+                <ActionPanel.Section>
+                  <ModelMenu {...modelMenuProps} shortcuts={false} />
+                  <EffortMenu {...modelMenuProps} shortcuts={false} />
+                </ActionPanel.Section>
+              }
             />
             {!ready && error && (
               <Action

@@ -15,6 +15,51 @@ export function uiLanguage(): UILanguage {
 // Keep the two Chinese variants explicit: automatic character conversion can
 // change product names or technical meanings. Unknown text always stays intact.
 const translations: Record<string, readonly [string, string]> = {
+  "Send Saved Draft: {preview}": ["发送草稿：{preview}", "傳送草稿：{preview}"],
+  "Change Default Strategy": ["修改默认策略", "修改預設策略"],
+  "Default strategy changed. Reopen these settings.": [
+    "默认策略已变更，请重新打开此设置页。",
+    "預設策略已變更，請重新開啟此設定頁。",
+  ],
+  "{provider} Defaults": ["{provider} 默认设置", "{provider} 預設設定"],
+  "Defaults apply when opening this CLI or starting a new chat. In-chat changes are temporary and do not change a fixed default.":
+    [
+      "默认值用于打开此 CLI 或新建聊天。对话中的临时切换不会修改固定默认值。",
+      "預設值用於開啟此 CLI 或建立新聊天。對話中的臨時切換不會修改固定預設值。",
+    ],
+  "Could not load default settings": ["无法读取默认设置", "無法讀取預設設定"],
+  "Default Strategy": ["默认策略", "預設策略"],
+  "Use Last Selection": ["沿用上次选择", "沿用上次選擇"],
+  "Fixed Model and Effort": ["固定模型与强度", "固定模型與強度"],
+  "Reuse this CLI's most recently selected model and effort level.": [
+    "继续使用此 CLI 最近选择的模型和思考强度。",
+    "繼續使用此 CLI 最近選擇的模型與思考強度。",
+  ],
+  "Choose a model and its supported effort level. Availability is checked again before saving; no prompt is sent.":
+    [
+      "选择模型及其支持的思考强度。保存前会重新检查可用选项，不发送消息。",
+      "選擇模型及其支援的思考強度。儲存前會重新檢查可用選項，不傳送訊息。",
+    ],
+  "Choose a valid model and effort level before saving.": [
+    "请选择有效的模型和思考强度后保存。",
+    "請選擇有效的模型與思考強度後儲存。",
+  ],
+  "The fixed default is no longer available. Choose a model and effort level again.":
+    [
+      "固定默认值已不可用，请重新选择模型和思考强度。",
+      "固定預設值已無法使用，請重新選擇模型與思考強度。",
+    ],
+  "Choose a fixed model and effort in CLI Settings first.": [
+    "请先在 CLI 设置中选择固定模型和思考强度。",
+    "請先在 CLI 設定中選擇固定模型與思考強度。",
+  ],
+  "Default model policy saved": ["默认策略已保存", "預設策略已儲存"],
+  "Save Defaults": ["保存默认设置", "儲存預設設定"],
+  "Model and Effort Defaults": ["模型与强度默认设置", "模型與強度預設設定"],
+  "Loading Models…": ["正在检查模型…", "正在檢查模型…"],
+  "Model List Unavailable": ["模型目录暂不可用", "模型清單暫不可用"],
+  "No Models Available": ["未发现可用模型", "未找到可用模型"],
+  "Not adjustable": ["不可单独调整", "無法單獨調整"],
   "View Full Conversation": ["查看完整对话", "檢視完整對話"],
   "Wait for Response": ["等待回复", "等待回覆"],
   "Keep drafting · Wait or stop, then send": [

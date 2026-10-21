@@ -18,11 +18,19 @@ const commands = {
   gemini: { provider: 'gemini', title: 'Gemini in Raycast' },
 };
 const providerIds = new Set(Object.values(commands).map(command => command.provider));
+const strategyPreferences = {
+  codex: 'codexModelStrategy',
+  antigravity: 'agyModelStrategy',
+  qoder: 'qoderModelStrategy',
+  'qoder-cn': 'qoderCnModelStrategy',
+  workbuddy: 'workbuddyModelStrategy',
+  gemini: 'geminiModelStrategy',
+};
 
 // Execute each real entrypoint and the production default component. Only the
 // Raycast host and unrelated UI children are replaced; command-routing.ts and
 // ConfiguredCommand's storage/setup logic remain production code.
-function commandHost(t, commandName, launch = {}) {
+function commandHost(t, commandName, launch = {}, options = {}) {
   const scopes = new Map();
   let scope, cursor;
   const effects = [];
@@ -34,7 +42,7 @@ function commandHost(t, commandName, launch = {}) {
     useEffect(fn, deps) { const i = cursor++; if (!scope[i] || deps.some((value, n) => value !== scope[i][n])) { scope[i] = deps; effects.push(fn); } },
   };
   const saved = new Map([[ACTIVE_PROVIDER_KEY, commandName === 'gemini' ? 'codex' : 'gemini']]);
-  const preferences = { activeProvider: saved.get(ACTIVE_PROVIDER_KEY) };
+  const preferences = { activeProvider: saved.get(ACTIVE_PROVIDER_KEY), ...options.preferences };
   for (const provider of providerIds) {
     const keys = storageKeys(provider);
     const selection = { model: `${provider}-selected-model`, effort: '' };
@@ -70,6 +78,7 @@ function commandHost(t, commandName, launch = {}) {
       if (id === '@raycast/api') return api;
       if (id === './provider') return { isProviderId: value => providerIds.has(value) };
       if (id === './setup') return { SetupWizard: 'setup' };
+      if (id === './model-settings') return { ModelSettings: 'model-settings' };
       if (id === './provider-menu') return { ProviderMenu: 'providers' };
       if (id === './message-composer') return { MessageComposer: 'composer' };
       if (id === './model-menu') return { ModelMenu: 'models', EffortMenu: 'efforts' };
@@ -99,7 +108,7 @@ function commandHost(t, commandName, launch = {}) {
   const root = () => render(entry, launch);
   t.after(() => { for (const cleanup of cleanups) cleanup?.(); });
   return {
-    root, reads, writes, launched, toasts, saved,
+    root, reads, writes, launched, toasts, saved, preferences,
     setLaunchError(value) { launchError = value; },
     async configured() {
       const outer = root();
@@ -130,7 +139,7 @@ for (const [name, expected] of Object.entries(commands)) {
     assert.equal(chat.props.provider, expected.provider);
     assert.deepEqual(chat.props.arguments, launch.arguments);
     const keys = storageKeys(expected.provider);
-    assert.deepEqual(host.reads, [keys.setup, keys.model]);
+    assert.deepEqual(host.reads, [keys.setup, keys.model, keys.modelPolicy]);
     assert.equal(host.reads.includes(ACTIVE_PROVIDER_KEY), false);
     assert.deepEqual(host.writes, []);
   });
@@ -141,6 +150,70 @@ for (const [name, expected] of Object.entries(commands)) {
     await host.root().props.onProviderChange('not-a-provider');
     assert.deepEqual(host.launched, []);
     assert.deepEqual(host.toasts, []);
+    assert.deepEqual(host.writes, []);
+  });
+
+  test(`${expected.title} requires its fixed default after completed setup and reloads the saved pair`, async t => {
+    const launch = { arguments: { prompt: 'keep this launch prompt' }, fallbackText: '' };
+    const host = commandHost(t, name, launch, {
+      preferences: { [strategyPreferences[expected.provider]]: 'fixed' },
+    });
+    const keys = storageKeys(expected.provider);
+    host.saved.set(keys.modelPolicy, JSON.stringify({ mode: 'last', selection: null }));
+    const settings = await host.configured();
+    assert.equal(settings.type, 'model-settings');
+    assert.equal(settings.props.provider, expected.provider);
+    assert.equal(typeof settings.props.onSaved, 'function');
+    assert.deepEqual(host.writes, []);
+    const fixed = { mode: 'fixed', selection: { model: `${expected.provider}-fixed-model`, effort: 'high' } };
+    host.saved.set(keys.modelPolicy, JSON.stringify(fixed));
+    settings.props.onSaved();
+    const chat = await host.configured();
+    assert.equal(chat.type.name, 'NativeChat');
+    assert.equal(chat.props.provider, expected.provider);
+    assert.deepEqual(chat.props.arguments, launch.arguments);
+    assert.deepEqual(host.reads, [keys.setup, keys.model, keys.modelPolicy, keys.setup, keys.model, keys.modelPolicy]);
+    assert.deepEqual(host.writes, []);
+  });
+
+  test(`${expected.title} uses the first explicit setup choice to complete a new fixed strategy`, async t => {
+    const host = commandHost(t, name, {}, {
+      preferences: { [strategyPreferences[expected.provider]]: 'fixed' },
+    });
+    const keys = storageKeys(expected.provider);
+    host.saved.delete(keys.setup);
+    const setup = await host.configured();
+    assert.equal(setup.type, 'setup');
+    const choice = { model: `${expected.provider}-first-choice`, effort: 'low' };
+    const completed = { version: 2, selection: choice, connection: connectionSignature(host.preferences, expected.provider), checkedAt: 2 };
+    setup.props.onComplete(completed);
+    await new Promise(setImmediate);
+    const chat = await host.configured();
+    assert.equal(chat.type.name, 'NativeChat');
+    assert.equal(chat.props.provider, expected.provider);
+    assert.deepEqual(host.writes, [[keys.modelPolicy, JSON.stringify({ mode: 'fixed', selection: choice })]]);
+    assert.deepEqual(JSON.parse(host.saved.get(keys.modelPolicy)), { mode: 'fixed', selection: choice });
+    assert.deepEqual(host.toasts, []);
+  });
+
+  test(`${expected.title} ignores other CLIs' native strategies and remounts only for its own strategy`, async t => {
+    const preferences = Object.fromEntries(
+      Object.entries(strategyPreferences).filter(([provider]) => provider !== expected.provider).map(([, key]) => [key, 'fixed']),
+    );
+    const host = commandHost(t, name, {}, { preferences });
+    const initialKey = host.root().key;
+    const chat = await host.configured();
+    assert.equal(chat.type.name, 'NativeChat');
+    assert.equal(chat.props.provider, expected.provider);
+    for (const [provider, key] of Object.entries(strategyPreferences)) {
+      if (provider !== expected.provider) host.preferences[key] = 'last';
+    }
+    assert.equal(host.root().key, initialKey);
+    host.preferences[strategyPreferences[expected.provider]] = 'fixed';
+    const fixedKey = host.root().key;
+    assert.notEqual(fixedKey, initialKey);
+    host.preferences[strategyPreferences[expected.provider]] = 'last';
+    assert.notEqual(host.root().key, fixedKey);
     assert.deepEqual(host.writes, []);
   });
 }

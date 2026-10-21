@@ -1,5 +1,6 @@
 import { t } from "./i18n";
 import { Action, ActionPanel, Icon } from "@raycast/api";
+import { useRef } from "react";
 import type { CodexModel, ModelSelection } from "./codex";
 
 export const MODEL_SELECTION_KEY = "ask-chatgpt.model-selection.v1";
@@ -21,31 +22,64 @@ function RefreshModels(props: ModelMenuProps) {
   return (
     <Action
       title={
-        props.error
-          ? t("Reload Model List")
-          : props.ready
-            ? t("Refresh Model List")
-            : t("Waiting for Connection")
+        props.loading
+          ? t("Loading Models…")
+          : props.error
+            ? t("Reload Model List")
+            : props.ready
+              ? t("Refresh Model List")
+              : t("Waiting for Connection")
       }
       icon={Icon.ArrowClockwise}
-      onAction={props.onRefresh}
+      onAction={() => loadOnOpen(props)}
     />
   );
 }
 
 function loadOnOpen(props: ModelMenuProps) {
-  if (!props.models.length && !props.loading && props.ready) props.onRefresh();
+  if (!props.loading && props.ready) props.onRefresh();
+}
+
+function catalogAvailable(props: ModelMenuProps): boolean {
+  return props.ready && !props.loading && !props.error;
+}
+
+function catalogCaption(props: ModelMenuProps): string {
+  return !props.ready
+    ? t("Waiting for Connection")
+    : props.loading
+      ? t("Loading Models…")
+      : props.error
+        ? t("Model List Unavailable")
+        : !props.models.length
+          ? t("No Models Available")
+          : "";
+}
+
+function CatalogStatus(props: ModelMenuProps) {
+  return (
+    <ActionPanel.Section
+      title={props.error || catalogCaption(props) || undefined}
+    >
+      <RefreshModels {...props} />
+    </ActionPanel.Section>
+  );
 }
 
 export function ModelMenu(props: ModelMenuProps) {
+  const latest = useRef(props);
+  latest.current = props;
   const selected = props.selection || props.current;
+  const available = catalogAvailable(props);
+  const caption = catalogCaption(props);
   return (
     <ActionPanel.Submenu
       title={t("Model: {model}", {
         model:
-          selected.model === "__cli_default__"
+          caption ||
+          (selected.model === "__cli_default__"
             ? t("CLI Default")
-            : selected.model || t("Auto"),
+            : selected.model || t("Choose a model")),
       })}
       icon={Icon.ComputerChip}
       shortcut={
@@ -57,43 +91,58 @@ export function ModelMenu(props: ModelMenuProps) {
             }
       }
       isLoading={props.loading}
-      onOpen={() => loadOnOpen(props)}
+      onOpen={() => loadOnOpen(latest.current)}
     >
-      {props.allowCurrent !== false && (
+      {available && props.models.length > 0 && props.allowCurrent !== false && (
         <Action
           title={t("Use Current Conversation Model")}
           icon={!props.selection ? Icon.Checkmark : Icon.Circle}
-          onAction={() => props.onSelect(null)}
+          onAction={() => {
+            const current = latest.current;
+            if (
+              catalogAvailable(current) &&
+              current.models.length &&
+              current.allowCurrent !== false
+            )
+              current.onSelect(null);
+          }}
         />
       )}
-      <ActionPanel.Section title={t("Model")}>
-        {props.models.map((model) => (
-          <Action
-            key={model.model}
-            title={
-              model.model === "__cli_default__"
-                ? t("CLI Default")
-                : model.displayName || model.model
-            }
-            icon={
-              selected.model === model.model
-                ? Icon.Checkmark
-                : Icon.ComputerChip
-            }
-            onAction={() => {
-              const effort = model.efforts.includes(selected.effort)
-                ? selected.effort
-                : model.efforts.includes(model.defaultEffort)
-                  ? model.defaultEffort
-                  : model.efforts[0] || "";
-              props.onSelect({ model: model.model, effort });
-            }}
-          />
-        ))}
-      </ActionPanel.Section>
-      <ActionPanel.Section>
-        <RefreshModels {...props} />
-      </ActionPanel.Section>
+      {available && props.models.length > 0 && (
+        <ActionPanel.Section title={t("Model")}>
+          {props.models.map((model) => (
+            <Action
+              key={model.model}
+              title={
+                model.model === "__cli_default__"
+                  ? t("CLI Default")
+                  : model.displayName || model.model
+              }
+              icon={
+                selected.model === model.model
+                  ? Icon.Checkmark
+                  : Icon.ComputerChip
+              }
+              onAction={() => {
+                const current = latest.current;
+                if (!catalogAvailable(current)) return;
+                const actual = current.models.find(
+                  (entry) => entry.model === model.model,
+                );
+                if (!actual) return;
+                const selection = current.selection || current.current;
+                const effort = actual.efforts.includes(selection.effort)
+                  ? selection.effort
+                  : actual.efforts.includes(actual.defaultEffort)
+                    ? actual.defaultEffort
+                    : actual.efforts[0] || "";
+                current.onSelect({ model: actual.model, effort });
+              }}
+            />
+          ))}
+        </ActionPanel.Section>
+      )}
+      <CatalogStatus {...props} />
     </ActionPanel.Submenu>
   );
 }
@@ -109,8 +158,12 @@ const effortOrder = [
   "ultra",
 ];
 export function EffortMenu(props: ModelMenuProps) {
+  const latest = useRef(props);
+  latest.current = props;
   const selected = props.selection || props.current;
   const model = props.models.find((entry) => entry.model === selected.model);
+  const available = catalogAvailable(props);
+  const caption = catalogCaption(props);
   const efforts = [...(model?.efforts || [])].sort((a, b) => {
     const first = effortOrder.indexOf(a);
     const second = effortOrder.indexOf(b);
@@ -123,13 +176,29 @@ export function EffortMenu(props: ModelMenuProps) {
   return (
     <ActionPanel.Submenu
       title={t("Effort Level: {effort}", {
-        effort: selected.effort || t("Auto"),
+        effort:
+          caption ||
+          (!model
+            ? t("Choose a model")
+            : !efforts.length
+              ? t("Not adjustable")
+              : efforts.includes(selected.effort)
+                ? selected.effort
+                : t("Choose an effort level")),
       })}
       icon={Icon.Gauge}
+      shortcut={
+        props.shortcuts === false
+          ? undefined
+          : {
+              modifiers: [process.platform === "darwin" ? "cmd" : "ctrl"],
+              key: "e",
+            }
+      }
       isLoading={props.loading}
-      onOpen={() => loadOnOpen(props)}
+      onOpen={() => loadOnOpen(latest.current)}
     >
-      {model && efforts.length > 0 && (
+      {available && model && efforts.length > 0 && (
         <ActionPanel.Section title={model.model}>
           {efforts.map((effort) => (
             <Action
@@ -137,22 +206,32 @@ export function EffortMenu(props: ModelMenuProps) {
               title={effort}
               icon={selected.effort === effort ? Icon.Checkmark : Icon.Circle}
               autoFocus={selected.effort === effort}
-              onAction={() => props.onSelect({ model: model.model, effort })}
+              onAction={() => {
+                const current = latest.current;
+                if (!catalogAvailable(current)) return;
+                const selection = current.selection || current.current;
+                const actual = current.models.find(
+                  (entry) => entry.model === selection.model,
+                );
+                if (
+                  actual?.model === model.model &&
+                  actual.efforts.includes(effort)
+                )
+                  current.onSelect({ model: actual.model, effort });
+              }}
             />
           ))}
         </ActionPanel.Section>
       )}
-      {model && !efforts.length && (
+      {available && model && !efforts.length && (
         <ActionPanel.Section
           title={t("This model does not expose an adjustable effort level.")}
         >
           <RefreshModels {...props} />
         </ActionPanel.Section>
       )}
-      {(!model || efforts.length > 0) && (
-        <ActionPanel.Section>
-          <RefreshModels {...props} />
-        </ActionPanel.Section>
+      {(!available || !model || efforts.length > 0) && (
+        <CatalogStatus {...props} />
       )}
     </ActionPanel.Submenu>
   );

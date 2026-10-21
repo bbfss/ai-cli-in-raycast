@@ -1,5 +1,14 @@
 # AI CLI in Raycast
 
+## [Live Model Controls and Defaults] - 2026-10-21
+
+- Add separate model and effort menus to the input popover; refresh the current CLI catalog each time the input or either menu opens. Hide stale choices during failures/loading and validate choices again before each reply.
+- Expose each CLI's last/fixed default strategy in Raycast preferences, with live fixed-model/effort selection in CLI Settings. Preserve fixed defaults during temporary in-chat changes and remember concrete last-used choices.
+- Read explicit WorkBuddy model effort metadata from the selected installed bundle and pass the chosen effort to its CLI. Keep unverified per-model effort choices unavailable.
+- Merge restored-draft previews into the send action to remove the second hint line; preserve recovery and draft/send protections.
+- Keep the native full-width Markdown conversation, aligned provider logos and user-preferred exchange dividers. Keep Store applications withdrawn.
+- Pass 261 tests, build, TypeScript and lint. Read back all six native strategy preferences and Codex model/effort menus; confirm the saved-draft preview appears only in its send action. Do not claim fresh all-provider inference or macOS acceptance.
+
 ## [Clear Exchange Boundaries] - 2026-10-21
 
 - Keep the user-preferred simple exchange dividers, question quotes and aligned provider headings; omit round numbers and extra reply labels.

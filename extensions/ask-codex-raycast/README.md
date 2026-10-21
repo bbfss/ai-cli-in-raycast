@@ -18,7 +18,8 @@ Each CLI command opens that CLI directly and restores its own conversations, dra
 1. Open **Raycast Settings → Extensions → AI CLI in Raycast**. Use Raycast's native **Enabled** checkbox on each command to show or hide it. Disabled CLI commands cannot be launched from the suite launcher or in-chat Switch CLI menu either.
 2. Install and sign in to the CLI through its own terminal interface. Open **AI CLI in Raycast** to choose a CLI, or launch a command such as **Codex in Raycast** directly. With automatic detection enabled, first-time setup checks the local connection and model catalog automatically, then asks you to choose a model. These checks send no inference prompt. Manual detection mode keeps an explicit connection-check action.
 3. Read the conversation in the full-width Markdown view. Press **Enter** to open the native input popover above the bottom-right action bar, type a message, then press **Enter** to send. The conversation stays visible; no editor page opens.
-4. **Cmd/Ctrl+P** switches CLI commands; **Cmd/Ctrl+M** opens models. Effort Level appears only where supported. Stop a running reply before switching.
+4. The input popover has separate **Model** and **Effort Level** menus. Opening the input or either menu checks the current CLI catalog again. **Cmd/Ctrl+P** switches CLI commands, **Cmd/Ctrl+M** opens models, and **Cmd/Ctrl+E** opens effort levels. Stop a running reply before switching CLI.
+5. In **Raycast Settings → Extensions → AI CLI in Raycast**, choose each CLI's default strategy: **Use Last Selection** or **Fixed Model and Effort**. Use **CLI Settings → [CLI] → Model and Effort Defaults** to choose the fixed pair from its current catalog. Fixed mode requires a valid choice and applies on opening the CLI or starting a new chat; in-chat choices remain temporary. Saving a fixed pair checks the catalog again without sending a prompt. Switching to last mode preserves the fixed pair for later reuse.
 
 Command enablement controls Raycast entry points; it does not uninstall a CLI or erase its saved chats. Existing Codex extension and command IDs are retained. Changing providers saves the current draft and launches the other command without passing your prompt or conversation to it.
 
@@ -26,37 +27,40 @@ Command enablement controls Raycast entry points; it does not uninstall a CLI or
 
 Open **CLI Settings** to see the six installation states and detected paths. Settings uses a native List and metadata inspector; setup uses native Forms. Chat uses a full-width native Detail with Markdown, code blocks, lists and formulas. Message entry uses an ActionPanel.Submenu input popover without navigating away from the conversation.
 
-| Preference                      | Behavior                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------- |
-| Interface Language              | English, 简体中文, or 繁體中文; English is the default                      |
-| Automatic CLI Detection         | Enabled by default; searches supported standard installation paths          |
-| Per-CLI Path                    | An explicit path always takes priority; leave empty for automatic discovery |
-| Working Directory               | Optional directory used by the CLI                                          |
-| Codex Web Search / Sandbox Mode | Codex-specific controls                                                     |
+| Preference                      | Behavior                                                                            |
+| ------------------------------- | ----------------------------------------------------------------------------------- |
+| Interface Language              | English, 简体中文, or 繁體中文; English is the default                              |
+| Automatic CLI Detection         | Enabled by default; searches supported standard installation paths                  |
+| Per-CLI Model Strategy          | Reuse the last model/effort, or apply a fixed pair chosen from the live CLI catalog |
+| Per-CLI Path                    | An explicit path always takes priority; leave empty for automatic discovery         |
+| Working Directory               | Optional directory used by the CLI                                                  |
+| Codex Web Search / Sandbox Mode | Codex-specific controls                                                             |
 
 When automatic detection is disabled, enter an explicit path for each CLI you use. A failed custom path is reported rather than silently replaced by an automatically found installation. Detection discovers local files; **Found** does not mean signed in, entitled to a model, or able to send a prompt. Use **Detect CLIs Again** after installing a CLI or changing paths.
 
-Extension-controlled UI follows the selected language. Raycast's static command and preference metadata remains English. Language selection does not translate model IDs, CLI diagnostics, saved prompts, or AI responses, and it does not change the language an AI must answer in.
+Extension-controlled UI follows the selected language. Raycast's host metadata is static, with some bilingual preference labels. Language selection does not translate model IDs, CLI diagnostics, saved prompts, or AI responses, and it does not change the language an AI must answer in.
 
 ## Providers and limitations
 
-| Additional CLI   | Model choices                                           | Resume             | Local Windows evidence (2026-10-21)                                                              |
-| ---------------- | ------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------ |
-| Qoder / Qoder CN | Live `--list-models`, plus CLI Default                  | Exact session ID   | Qoder CN 1.1.74: inference, restart/resume, cancel/continue passed; international build untested |
-| WorkBuddy        | Model aliases from installed `--help`, plus CLI Default | Exact session ID   | Embedded WorkBuddy AI CLI starts but requires its own login; inference/resume unverified         |
-| Gemini CLI       | CLI Default; no invented catalog                        | Exact session UUID | 0.65.0 starts; the local account returned `UNSUPPORTED_CLIENT`, so inference/resume unverified   |
+| Additional CLI   | Model choices                                                                          | Resume             | Local Windows evidence (2026-10-21)                                                              |
+| ---------------- | -------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------ |
+| Qoder / Qoder CN | Live `--list-models`, plus CLI Default                                                 | Exact session ID   | Qoder CN 1.1.74: inference, restart/resume, cancel/continue passed; international build untested |
+| WorkBuddy        | Installed `--help` aliases and selected bundle's chat model metadata, plus CLI Default | Exact session ID   | Embedded WorkBuddy AI CLI starts but requires its own login; inference/resume unverified         |
+| Gemini CLI       | CLI Default; no invented catalog                                                       | Exact session UUID | 0.65.0 starts; the local account returned `UNSUPPORTED_CLIENT`, so inference/resume unverified   |
 
-These additional CLIs do not expose steering or effort controls here. Qoder and WorkBuddy receive no-tools, strict-empty-MCP, hooks-disabled and noninteractive permission flags. Qoder CN's actual trace confirmed empty tools/MCP. WorkBuddy's init still advertised tools; effective restriction remains unverified pending CLI login. Gemini uses default approval mode and existing configuration, with extensions disabled; it is not represented as a no-tools or Codex-equivalent sandbox. Complete any workspace trust requirement in the CLI itself.
+Only Codex supports steering here. WorkBuddy exposes effort levels only when its selected installed bundle explicitly lists them for that exact model and its CLI advertises the effort flag. The local 2.161.0 bundle lists 23 choices, 12 with explicit effort levels; these are catalog results, not account entitlement checks. AGY 1.4.4 and Qoder CN 1.1.74 expose effort flags but do not publish per-model levels in their model-list output, so this extension keeps their effort menu informational. AGY's advertised low/medium/high variants remain separate model IDs. Gemini uses CLI Default without an invented model or effort catalog.
 
-| Feature                         | Codex CLI                                                  | Antigravity CLI (`agy`)                                     |
-| ------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
-| Bridge                          | Local app-server over stdio                                | Local stream-json subprocess                                |
-| Resume                          | Explicit thread ID                                         | Explicit conversation ID, persisted per local thread        |
-| Model discovery                 | app-server model/list                                      | agy models                                                  |
-| Streaming and stop              | Yes                                                        | Yes                                                         |
-| Add instructions during a reply | Supported                                                  | Wait or stop before sending another message                 |
-| Effort selection                | Supported levels from CLI                                  | Choose the CLI model variant; separate effort picker hidden |
-| Permissions                     | Selected Codex sandbox, no automatic interactive approvals | agy sandbox + plan mode; its guarantees differ from Codex   |
+Qoder and WorkBuddy receive no-tools, strict-empty-MCP, hooks-disabled and noninteractive permission flags. Qoder CN's actual trace confirmed empty tools/MCP. WorkBuddy's init still advertised tools; effective restriction remains unverified pending CLI login. Gemini uses default approval mode and existing configuration, with extensions disabled; it is not represented as a no-tools or Codex-equivalent sandbox. Complete any workspace trust requirement in the CLI itself.
+
+| Feature                         | Codex CLI                                                  | Antigravity CLI (`agy`)                                    |
+| ------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| Bridge                          | Local app-server over stdio                                | Local stream-json subprocess                               |
+| Resume                          | Explicit thread ID                                         | Explicit conversation ID, persisted per local thread       |
+| Model discovery                 | app-server model/list                                      | agy models                                                 |
+| Streaming and stop              | Yes                                                        | Yes                                                        |
+| Add instructions during a reply | Supported                                                  | Wait or stop before sending another message                |
+| Effort selection                | Supported levels from CLI                                  | Model variants; no verified separate per-model effort list |
+| Permissions                     | Selected Codex sandbox, no automatic interactive approvals | agy sandbox + plan mode; its guarantees differ from Codex  |
 
 The extension uses existing local CLI authentication. It does not import browser cookies, copy credentials, change global CLI configuration, or expose a network listener. A connection/catalog check does not prove inference entitlement, provider credential validity, quota, or network availability for the next message.
 
@@ -68,7 +72,9 @@ The latest question-and-answer group appears first, with the question above its 
 
 A successful send acknowledgement clears the submitted input only if it has not since been edited. Draft revisions, pending-send checks and unmount guards protect newer text from old callbacks and duplicate submissions. Failed sends keep the draft. **Clear Draft** explicitly discards it.
 
-The popover uses Raycast's native submenu search input. It is not a persistent multiline editor and does not promise Shift+Enter line breaks. The public API cannot programmatically refill its search text. When reopening a saved draft, the popover offers an explicitly labeled **Send Saved Draft** action with a short preview; **Copy Draft to Continue Editing** lets you copy and paste it into the input. Empty input does not silently send hidden saved text under the ordinary Send Message action. Existing multiline drafts can be sent intact through Send Saved Draft; there is no separate editor page.
+The popover uses Raycast's native submenu search input. It is not a persistent multiline editor and does not promise Shift+Enter line breaks. The public API cannot programmatically refill its search text. When reopening a saved draft, its preview appears in the explicit **Send Saved Draft: …** action, without a second hint row; **Copy Draft to Continue Editing** lets you copy and paste it into the input. Empty input does not silently send hidden saved text under the ordinary Send Message action. Existing multiline drafts can be sent intact through Send Saved Draft; there is no separate editor page.
+
+Ordinary input has no duplicate instruction section. The native `Search…` placeholder and submenu heading behavior are controlled by Raycast. Its public submenu API has no highlighted-row callback, so the heading changes when entering a submenu, rather than following row highlights. A loading or failed catalog never leaves older model/effort choices selectable. Explicit choices are checked again before each new reply; steering keeps the running reply's model.
 
 ## Architecture
 
@@ -78,7 +84,9 @@ The provider/agent separation described by [Magpie](https://github.com/yetone/ma
 
 ## Verification and development status
 
-Build, standalone TypeScript, lint and **177 tests passed** for the restored full-width Detail and floating-input implementation. Native Raycast 2.8.2 checks confirmed Markdown prose, code blocks, the bottom-right input popover and provider logos. Logo and provider-name centers now align within 0.5 display pixels in the measured Windows view. The user sent a message and received a complete reply in this interface.
+Build, standalone TypeScript, lint and **261 tests passed** for the current full-width Detail, floating input, live catalog and default-strategy implementation. Native Raycast 2.8.2 checks confirmed all six default-strategy preferences, the single-hint input and actual Codex model/effort menus without sending inference. Fixed-default save/reopen/reset cases are verified through production-component tests, rather than claimed as native acceptance.
+
+Earlier native checks confirmed Markdown prose, code blocks and provider logos. Logo and provider-name centers align within 0.5 display pixels in the measured Windows view. The user sent a message and received a complete reply in this interface.
 
 This UI verification did not rerun every provider's inference/resume/cancel checks. Their earlier backend evidence and account limitations remain separate. A fresh macOS run remains outstanding.
 

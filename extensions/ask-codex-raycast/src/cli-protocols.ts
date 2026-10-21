@@ -19,8 +19,21 @@ const record = (value: unknown): Record<string, unknown> =>
 /** Native argv only. No shell interpolation, latest-session fallback, or approvals. */
 export function buildCliArgs(
   provider: CliProviderId,
-  options: { prompt: string; model: string; remoteId?: string },
+  options: {
+    prompt: string;
+    model: string;
+    effort?: string;
+    remoteId?: string;
+  },
 ): string[] {
+  if (options.effort) {
+    if (provider !== "workbuddy")
+      throw new Error(
+        "This CLI does not publish verified per-model reasoning choices.",
+      );
+    if (!WORKBUDDY_EFFORTS.includes(options.effort))
+      throw new Error("Invalid WorkBuddy reasoning effort.");
+  }
   if (
     options.remoteId !== undefined &&
     !/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,255}$/.test(options.remoteId)
@@ -68,6 +81,7 @@ export function buildCliArgs(
     ...(options.model && options.model !== "__cli_default__"
       ? ["--model", options.model]
       : []),
+    ...(options.effort ? ["--effort", options.effort] : []),
     ...(options.remoteId ? ["--resume", options.remoteId] : []),
     "--print",
     "--",
@@ -179,6 +193,52 @@ const modelEntry = (model: string, displayName = model): CodexModel => ({
   efforts: [],
   defaultEffort: "",
 });
+
+// CodeBuddy 2.161.0 advertises these global input values. They are only
+// selectable when the chosen installed product model explicitly lists them.
+const WORKBUDDY_EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max"];
+
+/** Static product metadata only; never infer effort support from a model name. */
+export function parseWorkbuddyModelMetadata(value: unknown): CodexModel[] {
+  const entries = record(value).models;
+  if (!Array.isArray(entries)) return [];
+  const models = new Map<string, CodexModel>();
+  for (const value of entries) {
+    const entry = record(value);
+    if (typeof entry.id !== "string" || !/^[\w./:-]+$/.test(entry.id)) continue;
+    // The product also lists image/video generators, which are not chat models.
+    if (entry.supportsToolCall !== true && entry.supportsReasoning !== true)
+      continue;
+    const reasoning = record(entry.reasoning);
+    const efforts = Array.isArray(reasoning.supportedEfforts)
+      ? [
+          ...new Set(
+            reasoning.supportedEfforts.filter(
+              (value): value is string =>
+                typeof value === "string" && WORKBUDDY_EFFORTS.includes(value),
+            ),
+          ),
+        ]
+      : [];
+    const preferred =
+      typeof reasoning.defaultEffort === "string"
+        ? reasoning.defaultEffort
+        : typeof reasoning.effort === "string"
+          ? reasoning.effort
+          : "";
+    models.set(entry.id, {
+      ...modelEntry(
+        entry.id,
+        typeof entry.name === "string" && entry.name.trim()
+          ? entry.name
+          : entry.id,
+      ),
+      efforts,
+      defaultEffort: efforts.includes(preferred) ? preferred : "",
+    });
+  }
+  return [...models.values()];
+}
 
 /** Only consume model identifiers/labels, never provider settings or credentials. */
 export function parseCliModels(

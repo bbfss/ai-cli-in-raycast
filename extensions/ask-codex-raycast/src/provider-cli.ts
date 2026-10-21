@@ -5,12 +5,21 @@ import {
 } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
+import {
+  closeSync,
+  fstatSync,
+  openSync,
+  readSync,
+  realpathSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import type { CodexEvent, CodexModel, ModelSelection } from "./codex";
 import {
   buildCliArgs,
   parseCliEvent,
   parseCliModels,
+  parseWorkbuddyModelMetadata,
   type CliProviderId,
 } from "./cli-protocols";
 import {
@@ -30,6 +39,40 @@ type Options = {
     set(id: string, remote: string): Promise<void>;
   };
 };
+
+/** Read only the static product shipped beside this selected WorkBuddy bundle. */
+export function readWorkbuddyCatalog(executable: CliExecutable): CodexModel[] {
+  const entry = executable.prefix[0] || executable.command;
+  if (!/[/\\]app\.asar\.unpacked[/\\]cli[/\\]bin[/\\]codebuddy$/.test(entry))
+    return [];
+  let descriptor: number | undefined;
+  try {
+    const root = realpathSync(dirname(dirname(entry)));
+    const product = realpathSync(join(root, "product.json"));
+    if (dirname(product) !== root) return [];
+    descriptor = openSync(product, "r");
+    const info = fstatSync(descriptor);
+    const limit = 1024 * 1024;
+    if (!info.isFile() || info.size > limit) return [];
+    const bytes = Buffer.alloc(limit + 1);
+    const size = readSync(descriptor, bytes, 0, bytes.length, 0);
+    if (size > limit) return [];
+    return parseWorkbuddyModelMetadata(
+      JSON.parse(bytes.subarray(0, size).toString("utf8")),
+    );
+  } catch {
+    // Standalone/native installs and changed product schemas use CLI help only.
+    return [];
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor);
+      } catch {
+        // Optional static metadata must not block CLI discovery.
+      }
+    }
+  }
+}
 function bounded<T>(
   promise: Promise<T>,
   milliseconds: number,
@@ -96,6 +139,17 @@ export class CliChatClient {
             provider === "workbuddy" ? "--help" : "--list-models",
           ]);
     this.checkOpen();
+    const discovered = new Map(
+      parseCliModels(provider, output).map((model) => [model.model, model]),
+    );
+    if (provider === "workbuddy") {
+      const hasEffortFlag = /--effort\s+<[^>]+>/.test(output);
+      for (const model of readWorkbuddyCatalog(this.executable))
+        discovered.set(
+          model.model,
+          hasEffortFlag ? model : { ...model, efforts: [], defaultEffort: "" },
+        );
+    }
     this.catalog = [
       {
         model: "__cli_default__",
@@ -103,7 +157,7 @@ export class CliChatClient {
         efforts: [],
         defaultEffort: "",
       },
-      ...parseCliModels(provider, output),
+      ...discovered.values(),
     ];
     return this.catalog;
   }
@@ -148,24 +202,29 @@ export class CliChatClient {
     if (!this.executable) throw new Error("CLI is not connected");
     if (this.child)
       throw new Error("Wait for the response to finish, or stop it first.");
-    if (
-      !selection?.model ||
-      !this.catalog.some((model) => model.model === selection.model)
-    )
+    const model = this.catalog.find(
+      (model) => model.model === selection?.model,
+    );
+    if (!selection?.model || !model)
       throw new Error("Select an available CLI model before sending.");
+    if (selection.effort && !model.efforts.includes(selection.effort))
+      throw new Error(
+        "The selected reasoning effort is not advertised for this CLI model.",
+      );
     if (!this.threadId) await this.startThread();
     this.checkOpen();
     if (this.child)
       throw new Error("Wait for the response to finish, or stop it first.");
-    this.selection = { model: selection.model, effort: "" };
     const threadId = this.threadId!;
     const turnId = randomUUID();
     const itemId = randomUUID();
     const args = buildCliArgs(this.options.provider, {
       prompt,
       model: selection.model,
+      effort: selection.effort,
       remoteId: this.remoteId,
     });
+    this.selection = { model: selection.model, effort: selection.effort };
     const child = spawn(
       this.executable.command,
       [...this.executable.prefix, ...args],

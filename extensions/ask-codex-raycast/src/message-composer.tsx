@@ -10,6 +10,8 @@ export type ComposerProps = {
   onChange: (text: string) => void;
   onSend: (text: string) => Promise<boolean>;
   onStop: () => Promise<void> | void;
+  onRefreshModels?: () => void;
+  controls?: ActionPanel.Submenu.Props["children"];
 };
 
 /** A native input popover above the bottom-right action bar; chat stays visible. */
@@ -85,6 +87,7 @@ export function MessageComposer(props: ComposerProps) {
         openingReset.current = true;
         query.current = "";
         restored.current = Boolean(current.current.draft.trim());
+        current.current.onRefreshModels?.();
         update();
       }}
       onSearchTextChange={(text) => {
@@ -103,19 +106,13 @@ export function MessageComposer(props: ComposerProps) {
         update();
       }}
     >
-      <ActionPanel.Section
-        title={
-          preview
-            ? t("Pending · {preview}", { preview })
-            : t("Type a message, press Enter to send")
-        }
-      >
+      <ActionPanel.Section>
         <Action
           title={
             props.busy && !props.canSteer
               ? t("Wait for Response")
               : restored.current
-                ? t("Send Saved Draft")
+                ? t("Send Saved Draft: {preview}", { preview })
                 : props.busy
                   ? t("Send Instructions")
                   : t("Send Message")
@@ -124,6 +121,7 @@ export function MessageComposer(props: ComposerProps) {
           onAction={send}
         />
       </ActionPanel.Section>
+      {props.controls}
       {props.busy && (
         <Action
           title={t("Stop Response")}

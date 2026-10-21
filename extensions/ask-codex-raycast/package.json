@@ -226,6 +226,114 @@
       "default": true
     },
     {
+      "name": "codexModelStrategy",
+      "type": "dropdown",
+      "title": "Codex Default Strategy / 默认策略",
+      "description": "Use the most recent chat selection, or a fixed model and effort configured in CLI Settings → Codex. Fixed defaults are preserved when switching back to Use Last Selection.",
+      "required": false,
+      "default": "last",
+      "data": [
+        {
+          "title": "Use Last Selection / 沿用上次",
+          "value": "last"
+        },
+        {
+          "title": "Fixed Model and Effort / 固定模型与强度",
+          "value": "fixed"
+        }
+      ]
+    },
+    {
+      "name": "agyModelStrategy",
+      "type": "dropdown",
+      "title": "Antigravity Default Strategy / 默认策略",
+      "description": "Use the most recent chat selection, or a fixed model and effort configured in CLI Settings → Antigravity. Fixed defaults are preserved when switching back to Use Last Selection.",
+      "required": false,
+      "default": "last",
+      "data": [
+        {
+          "title": "Use Last Selection / 沿用上次",
+          "value": "last"
+        },
+        {
+          "title": "Fixed Model and Effort / 固定模型与强度",
+          "value": "fixed"
+        }
+      ]
+    },
+    {
+      "name": "qoderModelStrategy",
+      "type": "dropdown",
+      "title": "Qoder Default Strategy / 默认策略",
+      "description": "Use the most recent chat selection, or a fixed model and effort configured in CLI Settings → Qoder. Fixed defaults are preserved when switching back to Use Last Selection.",
+      "required": false,
+      "default": "last",
+      "data": [
+        {
+          "title": "Use Last Selection / 沿用上次",
+          "value": "last"
+        },
+        {
+          "title": "Fixed Model and Effort / 固定模型与强度",
+          "value": "fixed"
+        }
+      ]
+    },
+    {
+      "name": "qoderCnModelStrategy",
+      "type": "dropdown",
+      "title": "Qoder CN Default Strategy / 默认策略",
+      "description": "Use the most recent chat selection, or a fixed model and effort configured in CLI Settings → Qoder CN. Fixed defaults are preserved when switching back to Use Last Selection.",
+      "required": false,
+      "default": "last",
+      "data": [
+        {
+          "title": "Use Last Selection / 沿用上次",
+          "value": "last"
+        },
+        {
+          "title": "Fixed Model and Effort / 固定模型与强度",
+          "value": "fixed"
+        }
+      ]
+    },
+    {
+      "name": "workbuddyModelStrategy",
+      "type": "dropdown",
+      "title": "WorkBuddy Default Strategy / 默认策略",
+      "description": "Use the most recent chat selection, or a fixed model and effort configured in CLI Settings → WorkBuddy. Fixed defaults are preserved when switching back to Use Last Selection.",
+      "required": false,
+      "default": "last",
+      "data": [
+        {
+          "title": "Use Last Selection / 沿用上次",
+          "value": "last"
+        },
+        {
+          "title": "Fixed Model and Effort / 固定模型与强度",
+          "value": "fixed"
+        }
+      ]
+    },
+    {
+      "name": "geminiModelStrategy",
+      "type": "dropdown",
+      "title": "Gemini Default Strategy / 默认策略",
+      "description": "Use the most recent chat selection, or a fixed model and effort configured in CLI Settings → Gemini. Fixed defaults are preserved when switching back to Use Last Selection.",
+      "required": false,
+      "default": "last",
+      "data": [
+        {
+          "title": "Use Last Selection / 沿用上次",
+          "value": "last"
+        },
+        {
+          "title": "Fixed Model and Effort / 固定模型与强度",
+          "value": "fixed"
+        }
+      ]
+    },
+    {
       "name": "liveSearch",
       "type": "checkbox",
       "title": "Codex Web Search",

@@ -17,6 +17,7 @@ import {
   type CliDetectionResult,
 } from "./cli-detection";
 import { setLanguage, t } from "./i18n";
+import { ModelSettings } from "./model-settings";
 
 function statusText(result?: CliDetectionResult) {
   if (!result) return t("Checking…");
@@ -193,6 +194,11 @@ export default function CliSettings() {
               }
               actions={
                 <ActionPanel>
+                  <Action.Push
+                    title={t("Model and Effort Defaults")}
+                    icon={Icon.ComputerChip}
+                    target={<ModelSettings provider={entry.id} />}
+                  />
                   {preferencesAction}
                   {result?.path && (
                     <Action.CopyToClipboard

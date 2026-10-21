@@ -9,7 +9,7 @@ const { storageKeys } = require("../src/session-storage.ts");
 
 // Exercise the production chat callbacks; only the Raycast host and transport
 // are replaced. Deferred writes reproduce the provider-switch race.
-function chat(t, provider = "antigravity", initialDraft = "") {
+function chat(t, provider = "antigravity", initialDraft = "", options = {}) {
   const slots = [];
   let cursor = 0;
   let effects = [];
@@ -53,8 +53,17 @@ function chat(t, provider = "antigravity", initialDraft = "") {
   };
   const keys = storageKeys(provider);
   const saved = new Map([
-    [keys.model, JSON.stringify({ model: "test-model", effort: "" })],
+    [
+      keys.model,
+      JSON.stringify(
+        Object.hasOwn(options, "savedSelection")
+          ? options.savedSelection
+          : { model: "test-model", effort: "" },
+      ),
+    ],
   ]);
+  if (options.modelPolicy !== undefined)
+    saved.set(keys.modelPolicy, JSON.stringify(options.modelPolicy));
   if (initialDraft)
     saved.set(
       keys.library,
@@ -84,23 +93,44 @@ function chat(t, provider = "antigravity", initialDraft = "") {
   const toasts = [];
   const timeline = [];
   const prompts = [],
-    instructions = [];
+    instructions = [],
+    turnSelections = [];
+  let catalog = options.catalog || [
+    { model: "test-model", efforts: [], defaultEffort: "" },
+    { model: "new-model", efforts: [], defaultEffort: "" },
+  ];
+  let catalogResponder;
+  let catalogCalls = 0;
   const client = {
     currentThreadId: "test-thread",
     currentTurnId: null,
     threadSnapshot: {},
-    currentModelSelection: { model: "test-model", effort: "" },
+    currentModelSelection: options.currentSelection || {
+      model: "test-model",
+      effort: "",
+    },
     connect: async () => {},
-    startThread: async () => "test-thread",
+    async startThread() {
+      if (options.threadDefault)
+        this.currentModelSelection = { ...options.threadDefault };
+      return "test-thread";
+    },
     resumeThread: async () => "test-thread",
     close() {},
-    listModels: async () => [
-      { model: "test-model", efforts: [], defaultEffort: "" },
-    ],
-    async startTurn(prompt) {
+    async listModels() {
+      catalogCalls++;
+      if (catalogResponder) return catalogResponder();
+      return catalog.map((entry) => ({
+        ...entry,
+        efforts: [...entry.efforts],
+      }));
+    },
+    async startTurn(prompt, selection) {
       if (sendGate) await sendGate;
       started++;
       prompts.push(prompt);
+      turnSelections.push(selection ? { ...selection } : selection);
+      if (selection) this.currentModelSelection = { ...selection };
       this.currentTurnId = "turn";
       event({
         method: "turn/started",
@@ -138,7 +168,7 @@ function chat(t, provider = "antigravity", initialDraft = "") {
       EmptyView: "empty",
     }),
     environment: { assetsPath: "/assets" },
-    getPreferenceValues: () => ({}),
+    getPreferenceValues: () => options.preferences || {},
     Icon: {},
     Keyboard: { Shortcut: { Common: {} } },
     Toast: { Style: {} },
@@ -177,7 +207,6 @@ function chat(t, provider = "antigravity", initialDraft = "") {
         providerCapabilities: (p) => ({
           label: p === "codex" ? "Codex" : "Antigravity",
           supportsSteering: p === "codex",
-          supportsEffort: p === "codex",
         }),
         providerIcon: (p) => `provider-${p}.png`,
       };
@@ -186,6 +215,7 @@ function chat(t, provider = "antigravity", initialDraft = "") {
     if (id === "./model-menu")
       return { ModelMenu: "models", EffortMenu: "efforts" };
     if (id === "./setup") return { SetupWizard: "setup" };
+    if (id === "./model-settings") return { ModelSettings: "model-settings" };
     if (id === "./history") return { useSessionHistory: () => ({}) };
     return require(path.resolve(path.dirname(filename), id + ".ts"));
   };
@@ -216,10 +246,16 @@ function chat(t, provider = "antigravity", initialDraft = "") {
     return tree;
   }
   function nodes(node) {
+    if (Array.isArray(node)) return node.flatMap(nodes);
     if (!node || typeof node !== "object") return [];
     return [
       node,
-      ...[node.props?.children, node.props?.actions, node.props?.detail]
+      ...[
+        node.props?.children,
+        node.props?.actions,
+        node.props?.detail,
+        node.props?.controls,
+      ]
         .flat(Infinity)
         .flatMap(nodes),
     ];
@@ -249,6 +285,7 @@ function chat(t, provider = "antigravity", initialDraft = "") {
       return {
         composers: tree.filter((node) => node.type === "composer").length,
         models: tree.filter((node) => node.type === "models").length,
+        efforts: tree.filter((node) => node.type === "efforts").length,
         providers: tree.filter((node) => node.type === "providers").length,
       };
     },
@@ -261,6 +298,42 @@ function chat(t, provider = "antigravity", initialDraft = "") {
     clear: () => find("composer").onChange(""),
     providers: () => find("providers"),
     models: () => find("models"),
+    efforts: () => find("efforts"),
+    controls: () => nodes(find("composer").controls),
+    async flush() {
+      for (let n = 0; n < 4; n++) {
+        await new Promise(setImmediate);
+        render();
+      }
+    },
+    setCatalog(next) {
+      catalog = next;
+      catalogResponder = undefined;
+    },
+    failCatalog(message = "catalog unavailable") {
+      catalogResponder = async () => {
+        throw new Error(message);
+      };
+    },
+    deferCatalog() {
+      let resolve, reject;
+      const gate = new Promise((done, fail) => {
+        resolve = done;
+        reject = fail;
+      });
+      catalogResponder = () => gate;
+      return {
+        resolve(next) {
+          catalog = next;
+          catalogResponder = undefined;
+          resolve(next);
+        },
+        reject(message = "catalog unavailable") {
+          catalogResponder = undefined;
+          reject(new Error(message));
+        },
+      };
+    },
     markdown: () => render().props.markdown,
     stop: () =>
       nodes(render())
@@ -274,6 +347,10 @@ function chat(t, provider = "antigravity", initialDraft = "") {
         .find(
           (node) => node.type === Action && node.props.title === "CLI Settings",
         )
+        .props.onAction(),
+    newChat: () =>
+      nodes(render())
+        .find((node) => node.type === Action && node.props.title === "New Chat")
         .props.onAction(),
     blockWrites() {
       let release;
@@ -320,6 +397,7 @@ function chat(t, provider = "antigravity", initialDraft = "") {
     timeline,
     prompts,
     instructions,
+    turnSelections,
     delta(text) {
       event({
         method: "item/agentMessage/delta",
@@ -350,6 +428,9 @@ function chat(t, provider = "antigravity", initialDraft = "") {
     get interrupted() {
       return interrupted;
     },
+    get catalogCalls() {
+      return catalogCalls;
+    },
   };
 }
 
@@ -358,7 +439,12 @@ test("native conversation uses full-width Markdown and one floating composer", a
   await ui.ready();
   assert.equal(ui.view().type, "detail");
   assert.equal(ui.view().props.metadata, undefined);
-  assert.deepEqual(ui.menuCounts(), { composers: 1, models: 1, providers: 1 });
+  assert.deepEqual(ui.menuCounts(), {
+    composers: 1,
+    models: 2,
+    efforts: 2,
+    providers: 1,
+  });
   ui.input().onChange("literal $HOME text");
   await ui.send();
   assert.deepEqual(ui.prompts, ["literal $HOME text"]);
@@ -385,7 +471,12 @@ test("two exchanges and streaming Markdown remain complete without multiplying c
   assert.ok(output.indexOf("first question") < output.indexOf("first answer"));
   ui.input().onChange("unrelated draft");
   assert.equal(ui.markdown(), output);
-  assert.deepEqual(ui.menuCounts(), { composers: 1, models: 1, providers: 1 });
+  assert.deepEqual(ui.menuCounts(), {
+    composers: 1,
+    models: 2,
+    efforts: 2,
+    providers: 1,
+  });
   await ui.send();
   assert.deepEqual(ui.prompts, [
     "first question",
@@ -595,4 +686,485 @@ test("CLI Settings does not launch after the conversation closes during a pendin
   release();
   await pending;
   assert.deepEqual(ui.launches, []);
+});
+
+function catalogEntry(model, efforts = []) {
+  return { model, efforts, defaultEffort: efforts[0] || "" };
+}
+
+test("a non-steering provider has independent composer model and effort controls", async (t) => {
+  const ui = chat(t, "antigravity");
+  await ui.ready();
+  const controls = ui.controls();
+  assert.equal(controls.filter((node) => node.type === "models").length, 1);
+  assert.equal(controls.filter((node) => node.type === "efforts").length, 1);
+  assert.equal(typeof ui.input().onRefreshModels, "function");
+  assert.equal(typeof ui.models().onRefresh, "function");
+  assert.equal(typeof ui.efforts().onRefresh, "function");
+});
+
+test("reopening refreshes the CLI catalog and both menus receive the returned data", async (t) => {
+  const ui = chat(t);
+  await ui.ready();
+  const before = ui.catalogCalls;
+  const replacement = [catalogEntry("replacement-model")];
+  ui.setCatalog(replacement);
+  ui.input().onRefreshModels();
+  assert.deepEqual(ui.models().models, []);
+  assert.equal(ui.models().loading, true);
+  await ui.flush();
+  assert.equal(ui.catalogCalls, before + 1);
+  assert.deepEqual(ui.models().models, replacement);
+  assert.deepEqual(ui.efforts().models, replacement);
+  ui.models().onSelect({ model: "replacement-model", effort: "" });
+  await ui.flush();
+  assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.model)), {
+    model: "replacement-model",
+    effort: "",
+  });
+  ui.input().onRefreshModels();
+  await ui.flush();
+  assert.equal(ui.catalogCalls, before + 2);
+});
+
+test("a failed catalog refresh clears stale choices and prevents their persistence or use", async (t) => {
+  const ui = chat(t);
+  await ui.ready();
+  const staleSelect = ui.models().onSelect;
+  const previous = ui.saved.get(ui.keys.model);
+  const writes = ui.timeline.filter((key) => key === ui.keys.model).length;
+  ui.failCatalog("the CLI model catalog is offline");
+  ui.models().onRefresh();
+  assert.deepEqual(ui.models().models, []);
+  await ui.flush();
+  assert.deepEqual(ui.models().models, []);
+  assert.deepEqual(ui.efforts().models, []);
+  assert.match(ui.models().error, /catalog is offline/);
+  assert.equal(ui.models().loading, false);
+  staleSelect({ model: "new-model", effort: "" });
+  await ui.flush();
+  assert.equal(ui.saved.get(ui.keys.model), previous);
+  assert.equal(
+    ui.timeline.filter((key) => key === ui.keys.model).length,
+    writes,
+  );
+  await ui.send("preserve this message for retry");
+  assert.equal(ui.started, 0);
+  assert.equal(ui.input().draft, "preserve this message for retry");
+});
+
+test("invalid model IDs and unsupported effort levels never persist a selection", async (t) => {
+  const ui = chat(t, "codex");
+  await ui.ready();
+  ui.setCatalog([catalogEntry("test-model", ["low", "high"])]);
+  ui.models().onRefresh();
+  await ui.flush();
+  const before = ui.saved.get(ui.keys.model);
+  const writes = ui.timeline.filter((key) => key === ui.keys.model).length;
+  ui.models().onSelect({ model: "invented-model", effort: "low" });
+  ui.efforts().onSelect({ model: "test-model", effort: "ultra" });
+  ui.efforts().onSelect({ model: "test-model", effort: "" });
+  await ui.flush();
+  assert.equal(ui.saved.get(ui.keys.model), before);
+  assert.equal(
+    ui.timeline.filter((key) => key === ui.keys.model).length,
+    writes,
+  );
+  ui.efforts().onSelect({ model: "test-model", effort: "high" });
+  await ui.flush();
+  assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.model)), {
+    model: "test-model",
+    effort: "high",
+  });
+});
+
+test("a stale menu callback validates against the refreshed model and effort membership", async (t) => {
+  const ui = chat(t, "codex");
+  await ui.ready();
+  ui.setCatalog([
+    catalogEntry("test-model", ["low", "high"]),
+    catalogEntry("new-model"),
+  ]);
+  ui.models().onRefresh();
+  await ui.flush();
+  const oldSelect = ui.models().onSelect;
+  oldSelect({ model: "test-model", effort: "high" });
+  await ui.flush();
+  const previous = ui.saved.get(ui.keys.model);
+  const writes = ui.timeline.filter((key) => key === ui.keys.model).length;
+  ui.setCatalog([catalogEntry("test-model", ["low"])]);
+  ui.efforts().onRefresh();
+  await ui.flush();
+  oldSelect({ model: "new-model", effort: "" });
+  oldSelect({ model: "test-model", effort: "high" });
+  await ui.flush();
+  assert.equal(ui.saved.get(ui.keys.model), previous);
+  assert.equal(
+    ui.timeline.filter((key) => key === ui.keys.model).length,
+    writes,
+  );
+  ui.efforts().onSelect({ model: "test-model", effort: "low" });
+  await ui.flush();
+  assert.deepEqual(ui.models().selection, {
+    model: "test-model",
+    effort: "low",
+  });
+});
+
+test("in-flight and empty catalogs cannot authorize model persistence", async (t) => {
+  const ui = chat(t);
+  await ui.ready();
+  const previous = ui.saved.get(ui.keys.model);
+  const writes = ui.timeline.filter((key) => key === ui.keys.model).length;
+  const gate = ui.deferCatalog();
+  ui.models().onRefresh();
+  ui.models().onSelect({ model: "new-model", effort: "" });
+  await ui.flush();
+  assert.equal(ui.models().loading, true);
+  assert.equal(ui.saved.get(ui.keys.model), previous);
+  gate.resolve([]);
+  await ui.flush();
+  ui.models().onSelect({ model: "new-model", effort: "" });
+  await ui.flush();
+  assert.equal(ui.saved.get(ui.keys.model), previous);
+  assert.equal(
+    ui.timeline.filter((key) => key === ui.keys.model).length,
+    writes,
+  );
+});
+
+test("concurrent composer/model/effort refreshes deduplicate one CLI request", async (t) => {
+  const ui = chat(t);
+  await ui.ready();
+  const before = ui.catalogCalls;
+  const gate = ui.deferCatalog();
+  ui.input().onRefreshModels();
+  ui.models().onRefresh();
+  ui.efforts().onRefresh();
+  await ui.flush();
+  assert.equal(ui.catalogCalls, before + 1);
+  assert.equal(ui.models().loading, true);
+  assert.deepEqual(ui.models().models, []);
+  gate.resolve([catalogEntry("test-model")]);
+  await ui.flush();
+  assert.equal(ui.models().loading, false);
+  assert.deepEqual(ui.models().models, [catalogEntry("test-model")]);
+  ui.input().onRefreshModels();
+  await ui.flush();
+  assert.equal(ui.catalogCalls, before + 2);
+});
+
+test("each new message checks a fresh catalog instead of using cached model availability", async (t) => {
+  const ui = chat(t);
+  await ui.ready();
+  const before = ui.catalogCalls;
+  await ui.send("first fresh message");
+  assert.equal(ui.catalogCalls, before + 1);
+  assert.deepEqual(ui.turnSelections, [{ model: "test-model", effort: "" }]);
+  ui.complete();
+  ui.setCatalog([catalogEntry("replacement-model")]);
+  await ui.send("unavailable model must not run");
+  assert.equal(ui.catalogCalls, before + 2);
+  assert.equal(ui.started, 1);
+  assert.equal(ui.input().draft, "unavailable model must not run");
+  ui.setCatalog([catalogEntry("test-model")]);
+  await ui.send();
+  assert.equal(ui.catalogCalls, before + 3);
+  assert.equal(ui.started, 2);
+});
+
+test("steering retains the active model without requesting a replacement catalog", async (t) => {
+  const ui = chat(t, "codex");
+  await ui.ready();
+  await ui.send("start the original model");
+  const before = ui.catalogCalls;
+  ui.failCatalog("a new catalog request must not occur for steering");
+  await ui.send("keep using this active response");
+  assert.equal(ui.catalogCalls, before);
+  assert.deepEqual(ui.instructions, ["keep using this active response"]);
+  assert.equal(ui.started, 1);
+});
+
+test("a non-Codex CLI can persist effort choices reported by its current catalog", async (t) => {
+  const ui = chat(t, "antigravity");
+  await ui.ready();
+  ui.setCatalog([catalogEntry("test-model", ["low", "high"])]);
+  ui.efforts().onRefresh();
+  await ui.flush();
+  assert.deepEqual(ui.efforts().models[0].efforts, ["low", "high"]);
+  ui.efforts().onSelect({ model: "test-model", effort: "high" });
+  await ui.flush();
+  assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.model)), {
+    model: "test-model",
+    effort: "high",
+  });
+});
+
+test("a deferred shared catalog failure clears choices and allows the next refresh to retry", async (t) => {
+  const ui = chat(t);
+  await ui.ready();
+  const before = ui.catalogCalls;
+  const gate = ui.deferCatalog();
+  ui.input().onRefreshModels();
+  ui.models().onRefresh();
+  await ui.flush();
+  assert.equal(ui.catalogCalls, before + 1);
+  gate.reject("temporary catalog error");
+  await ui.flush();
+  assert.deepEqual(ui.models().models, []);
+  assert.match(ui.models().error, /temporary catalog error/);
+  ui.efforts().onRefresh();
+  await ui.flush();
+  assert.equal(ui.catalogCalls, before + 2);
+  assert.equal(ui.models().loading, false);
+  assert.equal(ui.models().error, "");
+  assert.deepEqual(
+    ui.models().models.map((entry) => entry.model),
+    ["test-model", "new-model"],
+  );
+});
+
+test("closing chat while a send waits for a fresh catalog prevents a late CLI start", async (t) => {
+  const ui = chat(t);
+  await ui.ready();
+  const before = ui.catalogCalls;
+  const gate = ui.deferCatalog();
+  const sending = ui.send("do not start this after closing");
+  await ui.flush();
+  assert.equal(ui.catalogCalls, before + 1);
+  assert.equal(ui.started, 0);
+  ui.dispose();
+  gate.resolve([catalogEntry("test-model")]);
+  await sending;
+  assert.equal(ui.started, 0);
+  assert.deepEqual(ui.prompts, []);
+});
+
+test("a captured model callback cannot alter storage after CLI Settings starts switching", async (t) => {
+  const ui = chat(t);
+  await ui.ready();
+  const selectFromOldMenu = ui.models().onSelect;
+  const release = ui.blockWrite("model");
+  selectFromOldMenu({ model: "test-model", effort: "" });
+  const pending = ui.settings();
+  await ui.flush();
+  assert.equal(ui.models().ready, false);
+  assert.equal(ui.efforts().ready, false);
+  selectFromOldMenu({ model: "new-model", effort: "" });
+  await ui.flush();
+  assert.deepEqual(ui.launches, []);
+  assert.deepEqual(ui.models().selection, { model: "test-model", effort: "" });
+  release();
+  await pending;
+  await ui.flush();
+  assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.model)), {
+    model: "test-model",
+    effort: "",
+  });
+  assert.equal(ui.timeline.filter((key) => key === ui.keys.model).length, 1);
+  assert.deepEqual(ui.launches, [{ name: "cli-settings", type: "user" }]);
+  assert.ok(
+    ui.timeline.lastIndexOf(ui.keys.model) < ui.timeline.indexOf("launch"),
+  );
+});
+
+test("a fixed default model and effort override the last saved selection when chat opens", async (t) => {
+  const fixed = {
+    mode: "fixed",
+    selection: { model: "new-model", effort: "high" },
+  };
+  const ui = chat(t, "antigravity", "saved draft", {
+    savedSelection: { model: "test-model", effort: "" },
+    modelPolicy: fixed,
+    catalog: [
+      catalogEntry("test-model"),
+      catalogEntry("new-model", ["low", "high"]),
+    ],
+  });
+  await ui.ready();
+  assert.deepEqual(ui.models().selection, fixed.selection);
+  assert.equal(ui.input().draft, "saved draft");
+  await ui.send();
+  assert.deepEqual(ui.turnSelections, [fixed.selection]);
+  assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.modelPolicy)), fixed);
+});
+
+test("temporary chat selection does not change the fixed default and New Chat reapplies it", async (t) => {
+  const fixed = {
+    mode: "fixed",
+    selection: { model: "new-model", effort: "high" },
+  };
+  const ui = chat(t, "antigravity", "", {
+    modelPolicy: fixed,
+    catalog: [
+      catalogEntry("test-model"),
+      catalogEntry("new-model", ["low", "high"]),
+    ],
+  });
+  await ui.ready();
+  ui.models().onSelect({ model: "test-model", effort: "" });
+  await ui.flush();
+  assert.deepEqual(ui.models().selection, { model: "test-model", effort: "" });
+  assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.modelPolicy)), fixed);
+  await ui.send("temporary model for this chat");
+  assert.deepEqual(ui.turnSelections, [{ model: "test-model", effort: "" }]);
+  ui.complete();
+  await ui.newChat();
+  assert.deepEqual(ui.models().selection, fixed.selection);
+  await ui.send("fixed model for the new chat");
+  assert.deepEqual(ui.turnSelections.at(-1), fixed.selection);
+  assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.modelPolicy)), fixed);
+});
+
+for (const { policy, preferences } of [
+  { policy: undefined },
+  { policy: { mode: "last", selection: null } },
+  {
+    policy: { mode: "fixed", selection: { model: "new-model", effort: "" } },
+    preferences: { agyModelStrategy: "last" },
+  },
+]) {
+  test(
+    (preferences
+      ? "native last mode overrides a stored fixed mode"
+      : policy
+        ? "explicit last mode"
+        : "missing policy retains legacy compatibility") +
+      " restores the saved choice and keeps temporary selections across New Chat",
+    async (t) => {
+      const ui = chat(t, "antigravity", "", {
+        modelPolicy: policy,
+        preferences,
+        savedSelection: { model: "new-model", effort: "" },
+      });
+      await ui.ready();
+      assert.deepEqual(ui.models().selection, {
+        model: "new-model",
+        effort: "",
+      });
+      ui.models().onSelect({ model: "test-model", effort: "" });
+      await ui.flush();
+      await ui.newChat();
+      assert.deepEqual(ui.models().selection, {
+        model: "test-model",
+        effort: "",
+      });
+      await ui.send("use the last chosen model");
+      assert.deepEqual(ui.turnSelections, [
+        { model: "test-model", effort: "" },
+      ]);
+    },
+  );
+}
+
+for (const selection of [
+  { model: "unavailable-fixed-model", effort: "" },
+  { model: "new-model", effort: "unsupported-effort" },
+  { model: "new-model", effort: "" },
+  null,
+]) {
+  test(
+    "an invalid fixed default refuses sending instead of silently using the last model: " +
+      (selection
+        ? selection.model + "/" + selection.effort
+        : "missing selection"),
+    async (t) => {
+      const ui = chat(t, "antigravity", "do not lose this draft", {
+        modelPolicy: { mode: "fixed", selection },
+        savedSelection: { model: "test-model", effort: "" },
+        catalog: [
+          catalogEntry("test-model"),
+          catalogEntry("new-model", ["low", "high"]),
+        ],
+      });
+      await ui.ready();
+      const accepted = await ui.send();
+      assert.equal(accepted, false);
+      assert.equal(ui.started, 0);
+      assert.deepEqual(ui.prompts, []);
+      assert.equal(ui.input().draft, "do not lose this draft");
+      assert.ok(ui.toasts.length > 0);
+      assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.modelPolicy)), {
+        mode: "fixed",
+        selection,
+      });
+    },
+  );
+}
+
+test("Use Current resolves and persists the actual active model and effort", async (t) => {
+  const actual = { model: "new-model", effort: "high" };
+  const ui = chat(t, "codex", "restored conversation", {
+    currentSelection: actual,
+    savedSelection: { model: "test-model", effort: "" },
+    catalog: [
+      catalogEntry("test-model"),
+      catalogEntry("new-model", ["low", "high"]),
+    ],
+  });
+  await ui.ready();
+  ui.models().onSelect(null);
+  await ui.flush();
+  assert.deepEqual(ui.models().selection, actual);
+  assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.model)), actual);
+  await ui.send("keep the actual model");
+  assert.deepEqual(ui.turnSelections, [actual]);
+});
+
+test("legacy null selection is remembered before New Chat resets the CLI default", async (t) => {
+  const actual = { model: "new-model", effort: "high" };
+  const cliDefault = { model: "test-model", effort: "" };
+  const ui = chat(t, "codex", "old conversation draft", {
+    savedSelection: null,
+    currentSelection: actual,
+    threadDefault: cliDefault,
+    catalog: [
+      catalogEntry("test-model"),
+      catalogEntry("new-model", ["low", "high"]),
+    ],
+  });
+  await ui.ready();
+  assert.equal(ui.models().selection, null);
+  await ui.newChat();
+  await ui.flush();
+  assert.deepEqual(ui.models().current, cliDefault);
+  assert.deepEqual(ui.models().selection, actual);
+  assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.model)), actual);
+  await ui.send("continue with the remembered actual model");
+  assert.deepEqual(ui.turnSelections, [actual]);
+});
+
+test("a successful legacy null send remembers the actual model for later messages", async (t) => {
+  const actual = { model: "new-model", effort: "high" };
+  const ui = chat(t, "codex", "legacy null message", {
+    savedSelection: null,
+    currentSelection: actual,
+    catalog: [
+      catalogEntry("test-model"),
+      catalogEntry("new-model", ["low", "high"]),
+    ],
+  });
+  await ui.ready();
+  assert.equal(ui.models().selection, null);
+  await ui.send();
+  await ui.flush();
+  assert.deepEqual(ui.turnSelections, [null]);
+  assert.deepEqual(ui.models().selection, actual);
+  assert.deepEqual(JSON.parse(ui.saved.get(ui.keys.model)), actual);
+  ui.complete();
+  await ui.send("the next message has an explicit remembered model");
+  assert.deepEqual(ui.turnSelections, [null, actual]);
+});
+
+test("native fixed mode overrides stored last mode and requires choosing its fixed model", async (t) => {
+  const ui = chat(t, "antigravity", "keep this until fixed model is set", {
+    preferences: { agyModelStrategy: "fixed" },
+    modelPolicy: { mode: "last", selection: null },
+    savedSelection: { model: "test-model", effort: "" },
+  });
+  await ui.ready();
+  assert.equal(await ui.send(), false);
+  assert.equal(ui.started, 0);
+  assert.equal(ui.input().draft, "keep this until fixed model is set");
+  assert.match(ui.toasts.at(-1).message, /fixed model/);
 });

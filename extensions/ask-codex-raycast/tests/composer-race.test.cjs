@@ -121,6 +121,11 @@ function composer(t, onSend = async () => true, options = {}) {
     primary: () => actions()[0].props.title,
     preview: () =>
       nodes(render()).find((node) => node.type === "section").props.title,
+    nodes: () => nodes(render()),
+    setProps(next) {
+      Object.assign(props, next);
+      render();
+    },
     unmount() {
       cleanup?.();
       cleanup = undefined;
@@ -147,7 +152,13 @@ test("opening reset preserves an explicitly labeled saved draft including multil
     { draft: raw },
   );
   ui.open();
-  assert.equal(ui.primary(), "Send Saved Draft");
+  assert.match(ui.primary(), /^Send Saved Draft: .*first second/);
+  assert.equal(ui.preview(), undefined);
+  assert.equal(
+    ui.nodes().filter((node) => node.type === "section" && node.props.title)
+      .length,
+    0,
+  );
   await ui.send();
   assert.equal(sent, raw);
 });
@@ -169,7 +180,7 @@ test("an empty visible query cannot secretly send the recoverable draft", async 
     "Enter a message in the input field first",
   );
   ui.open();
-  assert.equal(ui.primary(), "Send Saved Draft");
+  assert.equal(ui.primary(), "Send Saved Draft: recover me");
   await ui.send();
   assert.deepEqual(sent, ["recover me"]);
 });
@@ -194,7 +205,7 @@ for (const replacement of ["second message", "first message"])
     ui.type(replacement);
     accept(true);
     await pending;
-    assert.equal(ui.preview(), "Pending · " + replacement);
+    assert.equal(ui.preview(), undefined);
     assert.equal(ui.draft, replacement);
     await ui.send();
     assert.deepEqual(sent, ["first message", replacement]);
@@ -209,7 +220,7 @@ test("failed submission leaves the visible message available for retry", async (
   ui.open();
   ui.type("retry me");
   await ui.send();
-  assert.equal(ui.preview(), "Pending · retry me");
+  assert.equal(ui.preview(), undefined);
   assert.equal(ui.draft, "retry me");
   await ui.send();
   assert.deepEqual(sent, ["retry me", "retry me"]);
@@ -249,7 +260,7 @@ test("explicit clearing during a pending send cannot be undone by its acknowledg
   accept(true);
   await pending;
   assert.equal(ui.draft, "");
-  assert.equal(ui.preview(), "Type a message, press Enter to send");
+  assert.equal(ui.preview(), undefined);
   ui.open();
   assert.equal(ui.primary(), "Send Message");
 });
@@ -303,5 +314,90 @@ test("unmount suppresses late host input and acknowledgement changes", async (t)
   accept(true);
   await pending;
   assert.equal(ui.draft, "pending");
-  assert.equal(ui.preview(), "Pending · pending");
+  assert.equal(ui.preview(), undefined);
+});
+
+test("ordinary input has no duplicate instruction or pending-preview section title", (t) => {
+  const ui = composer(t);
+  ui.open();
+  assert.equal(ui.preview(), undefined);
+  ui.type("visible input already appears in the search field");
+  assert.equal(ui.preview(), undefined);
+  assert.equal(ui.primary(), "Send Message");
+  assert.equal(ui.draft, "visible input already appears in the search field");
+  assert.equal(
+    ui
+      .nodes()
+      .some(
+        (node) => node.props?.title === "Type a message, press Enter to send",
+      ),
+    false,
+  );
+});
+
+test("every composer opening refreshes the catalog through the latest callback", (t) => {
+  let original = 0;
+  let latest = 0;
+  const ui = composer(t, undefined, { onRefreshModels: () => original++ });
+  ui.open();
+  ui.open();
+  assert.equal(original, 2);
+  ui.setProps({ onRefreshModels: () => latest++ });
+  ui.open();
+  assert.equal(original, 2);
+  assert.equal(latest, 1);
+});
+
+test("the floating input includes independent model and effort controls without changing its send action", async (t) => {
+  const sent = [];
+  const controls = [
+    { type: "model-control", props: { title: "Model" } },
+    { type: "effort-control", props: { title: "Effort Level" } },
+  ];
+  const ui = composer(
+    t,
+    async (text) => {
+      sent.push(text);
+      return true;
+    },
+    { controls },
+  );
+  ui.open();
+  assert.equal(
+    ui.nodes().filter((node) => node.type === "model-control").length,
+    1,
+  );
+  assert.equal(
+    ui.nodes().filter((node) => node.type === "effort-control").length,
+    1,
+  );
+  ui.type("send this only once");
+  await ui.send();
+  assert.deepEqual(sent, ["send this only once"]);
+});
+
+test("saved draft preview occupies one action row and truncates at 90 Unicode code points", async (t) => {
+  const raw = "😀".repeat(110);
+  let sent;
+  const ui = composer(
+    t,
+    async (text) => {
+      sent = text;
+      return true;
+    },
+    { draft: raw },
+  );
+  ui.open();
+  assert.equal(ui.primary(), "Send Saved Draft: " + "😀".repeat(90));
+  assert.equal(
+    ui.nodes().filter((node) => node.type === "section" && node.props.title)
+      .length,
+    0,
+  );
+  assert.equal(
+    ui.nodes().find((node) => node.type === "copy").props.content,
+    raw,
+  );
+  await ui.send();
+  assert.equal(sent, raw);
 });

@@ -214,6 +214,10 @@ export class AntigravityClient {
       throw new Error(
         "Wait for Antigravity to finish, or stop its current response.",
       );
+    if (selection?.effort)
+      throw new Error(
+        "Antigravity does not publish per-model reasoning choices. Select its advertised model variant instead.",
+      );
     if (!this.threadId) await this.startThread();
     if (this.closed || this.child || this.turnId)
       throw new Error("Antigravity is not ready for another turn.");
