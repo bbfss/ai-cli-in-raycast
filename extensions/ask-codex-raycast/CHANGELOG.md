@@ -1,5 +1,11 @@
 # AI CLI in Raycast
 
+## [v0.1.0-beta.1] - 2026-10-22
+
+- Publish the GitHub beta under `bbfss/ai-cli-in-raycast`, with a focused repository homepage and extension-only source download.
+- Use a multi-provider suite icon combining Codex, Antigravity, Qoder, WorkBuddy and Gemini CLI marks. Retain each CLI's individual icon.
+- Preserve the extension and command IDs and the existing local conversation data.
+
 ## [macOS Preferred Languages] - 2026-10-21
 
 - Resolve Follow System from Raycast's macOS application language, then the Mac's preferred language, with Intl fallback. Preserve manual overrides and Windows behavior.

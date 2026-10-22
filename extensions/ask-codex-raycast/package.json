@@ -445,5 +445,6 @@
     "fix-lint": "ray lint --fix",
     "test": "node --test tests/*.test.cjs",
     "publish": "npx @raycast/api@latest publish"
-  }
+  },
+  "version": "0.1.0-beta.1"
 }

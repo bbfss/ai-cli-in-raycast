@@ -1,14 +1,16 @@
-# AI CLI in Raycast — development handoff (2026-10-21)
+# AI CLI in Raycast — development handoff (2026-10-22)
 
 ## Start here
 
-Repository: https://github.com/bbfss/raycast-extensions
+Repository: https://github.com/bbfss/ai-cli-in-raycast
 
 Branch: `feat/ai-in-raycast-multi-cli`
 
 Extension directory: `extensions/ask-codex-raycast`
 
 **Do not reopen withdrawn Store PRs or submit a new Store application.** The user explicitly reaffirmed this constraint. Previous PRs #31456 and #32387 are closed, not publication evidence.
+
+GitHub repository: **bbfss/ai-cli-in-raycast**, renamed from `bbfss/raycast-extensions`. The default branch is `feat/ai-in-raycast-multi-cli`; the Raycast fork history and monorepo layout are retained. GitHub beta releases distribute only the extension folder with installation instructions and the MIT license. GitHub publication is authorized; Store submission remains withdrawn.
 
 The extension is **AI CLI in Raycast**, a suite of eight independent native commands: the **AI CLI in Raycast** launcher (`cli-hub`), **Codex in Raycast** (`index`), **Antigravity in Raycast**, **Qoder in Raycast**, **Qoder CN in Raycast**, **WorkBuddy in Raycast**, **Gemini in Raycast**, and **CLI Settings** (`cli-settings`). Each has Raycast's native enabled checkbox in Settings → Extensions → AI CLI in Raycast. Asset provenance and command branding are maintained in [BRANDING.md](BRANDING.md). Preserve the original extension ID `ask-codex-raycast` and Codex command ID `index` so installed data and deep links continue to work.
 
@@ -78,7 +80,7 @@ Native auto-detection was also toggled off: four CLIs without explicit paths dis
 
 **Keyboard limitation:** The current evidence includes the user's own successful send and reply. It is not an independently injected Enter-probe result. Do not reuse earlier List or multi-page editor keyboard evidence, or claim Shift+Enter line breaks, an independently verified stop shortcut, or macOS keyboard acceptance. Additional keyboard automation and draft/cancel scenarios should be recorded individually if run.
 
-No Windows or macOS Store submission was made. Previous macOS baseline had 43 tests; the expanded suite needs a fresh macOS run. The development branding and command icons have been replaced, but no future Store policy or publication review is implied by these local changes.
+No Windows or macOS Store submission was made. Previous macOS baseline had 43 tests; the expanded suite needs a fresh macOS run. The suite icon combines the five CLI provider marks; individual command icons retain their corresponding provider marks. The GitHub beta branding is documented in BRANDING.md, but no future Store policy or publication review is implied by these local changes.
 
 ## Permissions and authentication boundaries
 
